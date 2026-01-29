@@ -13,6 +13,8 @@ import {
   notificationMethods,
   defaultAlarmRules,
   samplePointTables,
+  protocolPointTableTypes,
+  pointTableNames,
   virtualPointRules
 } from '../data/deviceTypes';
 
@@ -27,6 +29,8 @@ const STEPS = [
 function DeviceModelWizard({ onNavigate }) {
   const [currentStep, setCurrentStep] = useState(1);
   const customFieldCounter = useRef(0);
+  const pointTableFileRef = useRef(null);
+  const [customPointTable, setCustomPointTable] = useState([]);
   const [formData, setFormData] = useState({
     // 基础信息
     deviceCategory: '',
@@ -41,7 +45,7 @@ function DeviceModelWizard({ onNavigate }) {
     // 设备属性（动态）
     basicAttributes: {},
     advancedAttributes: {},
-    // 算法参数（PCS/储能相关）
+    // 算法参数（PCS相关）
     adjustThreshold: 220,
     responseTime: 0.5,
     pidKp: 2.5,
@@ -69,6 +73,47 @@ function DeviceModelWizard({ onNavigate }) {
   });
 
   const [completed, setCompleted] = useState(false);
+
+  // 获取当前协议可用的点表类型
+  const getAvailablePointTables = () => {
+    const tables = protocolPointTableTypes[formData.protocolType] || [];
+    return tables.map(tableId => ({
+      id: tableId,
+      name: pointTableNames[tableId] || tableId
+    }));
+  };
+
+  // 导入点表模板
+  const handlePointTableImport = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const points = JSON.parse(event.target.result);
+          if (Array.isArray(points)) {
+            setCustomPointTable(points);
+            updateFormData('selectedPointTable', 'custom');
+            alert(`成功导入 ${points.length} 个点位`);
+          } else {
+            alert('点表格式错误，请使用JSON数组格式');
+          }
+        } catch (err) {
+          alert('点表文件解析失败');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  // 获取当前点表数据
+  const getCurrentPointTableData = () => {
+    if (formData.selectedPointTable === 'custom') {
+      return customPointTable;
+    }
+    return samplePointTables[formData.selectedPointTable] || [];
+  };
 
   const updateFormData = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -671,8 +716,8 @@ function DeviceModelWizard({ onNavigate }) {
                 </div>
               </div>
 
-              {/* 算法参数（仅对PCS/储能类设备显示） */}
-              {(formData.deviceCategory === 'storage' || formData.deviceType === 'pcs') && (
+              {/* 算法参数（仅对PCS储能变流器显示 - 这是功率控制核心设备） */}
+              {formData.deviceType === 'pcs' && (
                 <div className="algorithm-params" style={{ marginTop: '20px' }}>
                   <div className="param-card-title" style={{ color: 'white' }}>
                     <span>⚡</span> 电力调节算法参数
@@ -958,6 +1003,43 @@ function DeviceModelWizard({ onNavigate }) {
               <div className="param-card">
                 <div className="param-card-title">
                   <span>📋</span> 协议点表配置
+                  <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                    <input
+                      type="file"
+                      ref={pointTableFileRef}
+                      accept=".json"
+                      style={{ display: 'none' }}
+                      onChange={handlePointTableImport}
+                    />
+                    <button 
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => pointTableFileRef.current?.click()}
+                    >
+                      📥 导入点表
+                    </button>
+                    {formData.selectedPointTable && (
+                      <button 
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => {
+                          const data = getCurrentPointTableData();
+                          const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                          const url = URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = `pointtable_${formData.selectedPointTable}.json`;
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                          URL.revokeObjectURL(url);
+                        }}
+                      >
+                        📤 导出点表
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="form-hint" style={{ marginBottom: '12px' }}>
+                  根据协议类型 <strong>{protocolTypes.find(p => p.id === formData.protocolType)?.name}</strong> 显示可用的点表模板
                 </div>
                 <div className="form-group" style={{ marginBottom: '12px' }}>
                   <label className="form-label">选择点表模板</label>
@@ -967,18 +1049,26 @@ function DeviceModelWizard({ onNavigate }) {
                     onChange={(e) => updateFormData('selectedPointTable', e.target.value)}
                   >
                     <option value="">请选择点表模板</option>
-                    <option value="modbus_pcs">Modbus PCS点表</option>
-                    <option value="modbus_bms">Modbus BMS点表</option>
-                    <option value="modbus_meter">Modbus 电表点表</option>
-                    <option value="modbus_inverter">Modbus 逆变器点表</option>
+                    {getAvailablePointTables().map(table => (
+                      <option key={table.id} value={table.id}>{table.name}</option>
+                    ))}
+                    {customPointTable.length > 0 && (
+                      <option value="custom">自定义导入点表 ({customPointTable.length}个点位)</option>
+                    )}
                   </select>
                 </div>
                 {formData.selectedPointTable && (
-                  <div className="point-table-selector">
+                  <div className="point-table-selector" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     <table style={{ width: '100%', fontSize: '12px' }}>
                       <thead>
                         <tr>
-                          <th>地址</th>
+                          {/* 根据协议类型显示不同的列 */}
+                          {formData.protocolType.startsWith('modbus') && <th>地址</th>}
+                          {formData.protocolType === 'iec61850' && <th>引用路径</th>}
+                          {formData.protocolType === 'iec104' && <th>IOA</th>}
+                          {formData.protocolType === 'can' && <th>CAN ID</th>}
+                          {formData.protocolType.startsWith('dlt645') && <th>数据标识</th>}
+                          {formData.protocolType === 'opc' && <th>节点ID</th>}
                           <th>名称</th>
                           <th>数据类型</th>
                           <th>读写</th>
@@ -986,17 +1076,38 @@ function DeviceModelWizard({ onNavigate }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {(samplePointTables[formData.selectedPointTable] || []).map((point, index) => (
+                        {getCurrentPointTableData().map((point, index) => (
                           <tr key={index}>
-                            <td>{point.address}</td>
+                            {/* 根据协议类型显示不同的地址/标识列 */}
+                            {formData.protocolType.startsWith('modbus') && <td>{point.address}</td>}
+                            {formData.protocolType === 'iec61850' && <td style={{ fontSize: '11px' }}>{point.reference}</td>}
+                            {formData.protocolType === 'iec104' && <td>{point.ioa}</td>}
+                            {formData.protocolType === 'can' && <td>{point.canId}</td>}
+                            {formData.protocolType.startsWith('dlt645') && <td>{point.dataId}</td>}
+                            {formData.protocolType === 'opc' && <td style={{ fontSize: '11px' }}>{point.nodeId}</td>}
                             <td>{point.name}</td>
                             <td>{point.type}</td>
-                            <td><span className={`tag ${point.rw === 'R' ? 'tag-gray' : 'tag-blue'}`}>{point.rw}</span></td>
+                            <td>
+                              <span className={`tag ${point.rw === 'R' ? 'tag-gray' : 'tag-blue'}`}>
+                                {point.rw || '-'}
+                              </span>
+                            </td>
                             <td>{point.description}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                )}
+                {getAvailablePointTables().length === 0 && !formData.selectedPointTable && (
+                  <div style={{ 
+                    padding: '20px', 
+                    textAlign: 'center', 
+                    color: 'var(--gray-400)',
+                    border: '1px dashed var(--gray-300)',
+                    borderRadius: '8px'
+                  }}>
+                    当前协议暂无预设点表模板，请导入自定义点表
                   </div>
                 )}
               </div>

@@ -30,7 +30,7 @@ function Dashboard({ onNavigate }) {
       }}>
         <h2 style={{ fontSize: '24px', marginBottom: '8px' }}>欢迎使用 EMS智能配置系统</h2>
         <p style={{ opacity: 0.9, marginBottom: '20px' }}>
-          傻瓜式引导配置，让复杂的EMS现场工程配置变得简单易用
+          引导式配置，让复杂的EMS现场工程配置变得简单易用
         </p>
         <div style={{ display: 'flex', gap: '12px' }}>
           <button 
@@ -156,13 +156,15 @@ function Dashboard({ onNavigate }) {
           <h3 className="card-title">支持的设备类型 - 风光柴储充应用场景</h3>
         </div>
         <div className="card-body">
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
             {[
               { icon: '🌬️', name: '风力发电', items: ['风机', '风机控制器', '变流器'] },
               { icon: '☀️', name: '光伏发电', items: ['光伏组串', '逆变器', '汇流箱'] },
               { icon: '⛽', name: '柴油发电', items: ['柴油机组', 'ATS开关'] },
               { icon: '🔋', name: '储能系统', items: ['电池簇', 'BMS', 'PCS'] },
               { icon: '🔌', name: '充电桩', items: ['交流桩', '直流桩', '充电模块'] },
+              { icon: '🌡️', name: '动环监控', items: ['温湿度传感器', '空调', 'UPS'] },
+              { icon: '🧯', name: '消防系统', items: ['消防主机', '气体灭火', '探测器'] },
               { icon: '⚙️', name: '其他设备', items: ['电表', '配电柜', '变压器'] }
             ].map((category) => (
               <div key={category.name} style={{ textAlign: 'center' }}>

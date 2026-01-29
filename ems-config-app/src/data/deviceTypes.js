@@ -67,6 +67,48 @@ export const deviceCategories = [
       { id: 'load', name: '负载', icon: '💡', description: '用电负载设备' },
       { id: 'grid', name: '电网', icon: '🌐', description: '市电/电网接入点' }
     ]
+  },
+  {
+    id: 'environment',
+    name: '动环监控',
+    icon: '🌡️',
+    color: '#16a34a',
+    devices: [
+      { id: 'temp_sensor', name: '温度传感器', icon: '🌡️', description: '环境温度监测' },
+      { id: 'humidity_sensor', name: '湿度传感器', icon: '💧', description: '环境湿度监测' },
+      { id: 'water_sensor', name: '水浸传感器', icon: '💦', description: '水浸检测报警' },
+      { id: 'smoke_sensor', name: '烟感探测器', icon: '💨', description: '烟雾检测报警' },
+      { id: 'door_sensor', name: '门磁传感器', icon: '🚪', description: '门禁状态监测' },
+      { id: 'ac_unit', name: '空调', icon: '❄️', description: '温控空调设备' },
+      { id: 'fan', name: '风机', icon: '🌀', description: '通风散热风机' },
+      { id: 'ups', name: 'UPS', icon: '🔌', description: '不间断电源' }
+    ]
+  },
+  {
+    id: 'fire',
+    name: '消防系统',
+    icon: '🧯',
+    color: '#dc2626',
+    devices: [
+      { id: 'fire_alarm_panel', name: '消防主机', icon: '🚨', description: '火灾报警控制器' },
+      { id: 'fire_detector', name: '火灾探测器', icon: '🔥', description: '火灾探测设备' },
+      { id: 'gas_suppression', name: '气体灭火', icon: '🧯', description: '七氟丙烷/IG541灭火系统' },
+      { id: 'water_spray', name: '水喷淋', icon: '🚿', description: '水喷淋灭火系统' },
+      { id: 'exhaust_fan', name: '排烟风机', icon: '🌬️', description: '消防排烟设备' },
+      { id: 'emergency_light', name: '应急照明', icon: '💡', description: '消防应急照明' },
+      { id: 'fire_door', name: '防火门', icon: '🚪', description: '防火门监控' }
+    ]
+  },
+  {
+    id: 'custom',
+    name: '自定义设备',
+    icon: '🔧',
+    color: '#6366f1',
+    devices: [
+      { id: 'custom_device', name: '自定义设备', icon: '🔧', description: '用户自定义设备类型' },
+      { id: 'custom_sensor', name: '自定义传感器', icon: '📡', description: '用户自定义传感器' },
+      { id: 'custom_controller', name: '自定义控制器', icon: '🎛️', description: '用户自定义控制器' }
+    ]
   }
 ];
 
@@ -306,7 +348,10 @@ export const manufacturersByCategory = {
   diesel: ['康明斯', '卡特彼勒', '沃尔沃', '珀金斯', '玉柴', '潍柴', '上柴', '中国重汽', '其他'],
   storage: ['宁德时代', '比亚迪', '阳光电源', '科华数据', '南都电源', '派能科技', '海辰储能', '亿纬锂能', 'LG新能源', '三星SDI', '其他'],
   charger: ['特来电', '星星充电', '国家电网', '南方电网', '普天新能源', '万马新能源', 'ABB', '西门子', '其他'],
-  other: ['正泰电器', '许继电气', '国电南瑞', 'ABB', '施耐德', '西门子', '威胜集团', '海兴电力', '其他']
+  other: ['正泰电器', '许继电气', '国电南瑞', 'ABB', '施耐德', '西门子', '威胜集团', '海兴电力', '其他'],
+  environment: ['海康威视', '大华科技', '施耐德', 'ABB', '霍尼韦尔', '西门子', '艾默生', '维谛技术', '科华数据', '英维克', '其他'],
+  fire: ['海湾安全', '青鸟消防', '首安工业', '泰科消防', '霍尼韦尔', '久远银海', '依爱消防', '中消云', '其他'],
+  custom: ['自定义厂商', '其他']
 };
 
 // 电压等级 - 通用（交流）
@@ -567,7 +612,89 @@ export const samplePointTables = {
     { address: 13, name: 'PV2电流', type: 'float32', rw: 'R', description: '单位:A', factor: 0.1 },
     { address: 15, name: '机内温度', type: 'int16', rw: 'R', description: '单位:°C', factor: 0.1 },
     { address: 16, name: '电网频率', type: 'float32', rw: 'R', description: '单位:Hz', factor: 0.01 }
+  ],
+  // IEC 61850点表
+  iec61850_pcs: [
+    { reference: 'PCSC1.MMXU1.TotW', name: '有功功率', type: 'FLOAT', rw: 'R', fc: 'MX', description: '总有功功率' },
+    { reference: 'PCSC1.MMXU1.TotVAr', name: '无功功率', type: 'FLOAT', rw: 'R', fc: 'MX', description: '总无功功率' },
+    { reference: 'PCSC1.MMXU1.TotPF', name: '功率因数', type: 'FLOAT', rw: 'R', fc: 'MX', description: '总功率因数' },
+    { reference: 'PCSC1.MMXU1.PhV.phsA', name: 'A相电压', type: 'FLOAT', rw: 'R', fc: 'MX', description: '单位:V' },
+    { reference: 'PCSC1.MMXU1.PhV.phsB', name: 'B相电压', type: 'FLOAT', rw: 'R', fc: 'MX', description: '单位:V' },
+    { reference: 'PCSC1.MMXU1.PhV.phsC', name: 'C相电压', type: 'FLOAT', rw: 'R', fc: 'MX', description: '单位:V' },
+    { reference: 'PCSC1.CSWI1.Pos', name: '运行状态', type: 'INT', rw: 'R', fc: 'ST', description: '开关位置' },
+    { reference: 'PCSC1.GGIO1.SPCSO1', name: '启停控制', type: 'BOOL', rw: 'RW', fc: 'CO', description: '远程启停' }
+  ],
+  // IEC 104点表
+  iec104_pcs: [
+    { ioa: 1, name: '系统运行状态', type: 'M_SP_NA_1', cot: '3', description: '单点遥信' },
+    { ioa: 2, name: '充放电状态', type: 'M_DP_NA_1', cot: '3', description: '双点遥信' },
+    { ioa: 100, name: '有功功率', type: 'M_ME_NC_1', cot: '3', description: '短浮点遥测' },
+    { ioa: 101, name: '无功功率', type: 'M_ME_NC_1', cot: '3', description: '短浮点遥测' },
+    { ioa: 102, name: '直流电压', type: 'M_ME_NC_1', cot: '3', description: '短浮点遥测' },
+    { ioa: 103, name: '直流电流', type: 'M_ME_NC_1', cot: '3', description: '短浮点遥测' },
+    { ioa: 1000, name: '启停控制', type: 'C_SC_NA_1', cot: '6', description: '单点遥控' },
+    { ioa: 1001, name: '功率设定', type: 'C_SE_NC_1', cot: '6', description: '浮点遥调' }
+  ],
+  // CAN总线点表
+  can_bms: [
+    { canId: '0x18FF50E5', name: '系统SOC', byte: '0-1', type: 'uint16', factor: 0.1, description: '电池SOC' },
+    { canId: '0x18FF50E5', name: '系统SOH', byte: '2-3', type: 'uint16', factor: 0.1, description: '电池SOH' },
+    { canId: '0x18FF51E5', name: '总电压', byte: '0-1', type: 'uint16', factor: 0.1, description: '电池总电压' },
+    { canId: '0x18FF51E5', name: '总电流', byte: '2-3', type: 'int16', factor: 0.1, description: '电池总电流' },
+    { canId: '0x18FF52E5', name: '最高单体电压', byte: '0-1', type: 'uint16', factor: 1, description: '单位:mV' },
+    { canId: '0x18FF52E5', name: '最低单体电压', byte: '2-3', type: 'uint16', factor: 1, description: '单位:mV' },
+    { canId: '0x18FF53E5', name: '最高温度', byte: '0', type: 'int8', factor: 1, offset: -40, description: '单位:°C' },
+    { canId: '0x18FF53E5', name: '最低温度', byte: '1', type: 'int8', factor: 1, offset: -40, description: '单位:°C' }
+  ],
+  // DL/T 645电表点表
+  dlt645_meter: [
+    { dataId: '00010000', name: '正向有功总电能', type: 'float', unit: 'kWh', description: '正向有功电度' },
+    { dataId: '00020000', name: '反向有功总电能', type: 'float', unit: 'kWh', description: '反向有功电度' },
+    { dataId: '02010100', name: 'A相电压', type: 'float', unit: 'V', description: '线电压' },
+    { dataId: '02010200', name: 'B相电压', type: 'float', unit: 'V', description: '线电压' },
+    { dataId: '02010300', name: 'C相电压', type: 'float', unit: 'V', description: '线电压' },
+    { dataId: '02020100', name: 'A相电流', type: 'float', unit: 'A', description: '相电流' },
+    { dataId: '02020200', name: 'B相电流', type: 'float', unit: 'A', description: '相电流' },
+    { dataId: '02020300', name: 'C相电流', type: 'float', unit: 'A', description: '相电流' },
+    { dataId: '02030000', name: '瞬时有功功率', type: 'float', unit: 'kW', description: '有功功率' },
+    { dataId: '02040000', name: '瞬时无功功率', type: 'float', unit: 'kVar', description: '无功功率' }
+  ],
+  // OPC点表
+  opc_pcs: [
+    { nodeId: 'ns=2;s=PCS.Status', name: '运行状态', type: 'Int32', rw: 'R', description: '设备状态' },
+    { nodeId: 'ns=2;s=PCS.ActivePower', name: '有功功率', type: 'Float', rw: 'R', description: '单位:kW' },
+    { nodeId: 'ns=2;s=PCS.ReactivePower', name: '无功功率', type: 'Float', rw: 'R', description: '单位:kVar' },
+    { nodeId: 'ns=2;s=PCS.DcVoltage', name: '直流电压', type: 'Float', rw: 'R', description: '单位:V' },
+    { nodeId: 'ns=2;s=PCS.DcCurrent', name: '直流电流', type: 'Float', rw: 'R', description: '单位:A' },
+    { nodeId: 'ns=2;s=PCS.PowerSetpoint', name: '功率设定', type: 'Float', rw: 'RW', description: '单位:kW' },
+    { nodeId: 'ns=2;s=PCS.StartStop', name: '启停控制', type: 'Boolean', rw: 'RW', description: '远程启停' }
   ]
+};
+
+// 协议对应的点表类型
+export const protocolPointTableTypes = {
+  modbus_rtu: ['modbus_pcs', 'modbus_bms', 'modbus_meter', 'modbus_inverter'],
+  modbus_tcp: ['modbus_pcs', 'modbus_bms', 'modbus_meter', 'modbus_inverter'],
+  iec61850: ['iec61850_pcs'],
+  iec104: ['iec104_pcs'],
+  can: ['can_bms'],
+  dlt645_97: ['dlt645_meter'],
+  dlt645_07: ['dlt645_meter'],
+  opc: ['opc_pcs'],
+  private: []
+};
+
+// 点表类型名称映射
+export const pointTableNames = {
+  modbus_pcs: 'Modbus PCS点表',
+  modbus_bms: 'Modbus BMS点表',
+  modbus_meter: 'Modbus 电表点表',
+  modbus_inverter: 'Modbus 逆变器点表',
+  iec61850_pcs: 'IEC 61850 PCS点表',
+  iec104_pcs: 'IEC 104 PCS点表',
+  can_bms: 'CAN总线 BMS点表',
+  dlt645_meter: 'DL/T 645 电表点表',
+  opc_pcs: 'OPC UA PCS点表'
 };
 
 // 算法策略参数默认值（参考EMS核心算法设计说明书）

@@ -7,6 +7,9 @@ import ProjectConfigWizard from './pages/ProjectConfigWizard';
 import ProjectList from './pages/ProjectList';
 import DeviceModelList from './pages/DeviceModelList';
 import TemplateManager from './pages/TemplateManager';
+import DataMonitor from './pages/DataMonitor';
+import DebugTools from './pages/DebugTools';
+import SystemMaintenance from './pages/SystemMaintenance';
 
 function App() {
   const [currentPage, setCurrentPage] = useState('dashboard');
@@ -31,6 +34,12 @@ function App() {
         return <DeviceModelList onNavigate={handleNavigate} />;
       case 'template-manager':
         return <TemplateManager onNavigate={handleNavigate} />;
+      case 'data-monitor':
+        return <DataMonitor onNavigate={handleNavigate} />;
+      case 'debug-tools':
+        return <DebugTools onNavigate={handleNavigate} />;
+      case 'system-maintenance':
+        return <SystemMaintenance onNavigate={handleNavigate} />;
       default:
         return <Dashboard onNavigate={handleNavigate} />;
     }

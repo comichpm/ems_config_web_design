@@ -17,6 +17,19 @@ function Sidebar({ currentPage, onNavigate }) {
         { id: 'device-model-list', name: '物模型库', icon: '📦' },
         { id: 'template-manager', name: '模板管理', icon: '📋' }
       ]
+    },
+    {
+      section: '运行监控',
+      items: [
+        { id: 'data-monitor', name: '数据监控', icon: '📈' },
+        { id: 'debug-tools', name: '调试工具', icon: '🔬' }
+      ]
+    },
+    {
+      section: '系统维护',
+      items: [
+        { id: 'system-maintenance', name: '系统维护', icon: '🛠️' }
+      ]
     }
   ];
 
