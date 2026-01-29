@@ -1559,10 +1559,12 @@ function ProjectConfigWizard({ onNavigate }) {
                       <input
                         type="number"
                         className="form-input"
+                        min="0"
+                        max="10000"
                         value={algorithmConfig.reversePowerProtection?.threshold || 10}
                         onChange={(e) => setAlgorithmConfig(prev => ({
                           ...prev,
-                          reversePowerProtection: { ...prev.reversePowerProtection, threshold: Number(e.target.value) }
+                          reversePowerProtection: { ...prev.reversePowerProtection, threshold: Math.max(0, Number(e.target.value)) }
                         }))}
                         style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white' }}
                       />
@@ -1572,10 +1574,12 @@ function ProjectConfigWizard({ onNavigate }) {
                       <input
                         type="number"
                         className="form-input"
+                        min="0"
+                        max="300"
                         value={algorithmConfig.reversePowerProtection?.actionDelay || 5}
                         onChange={(e) => setAlgorithmConfig(prev => ({
                           ...prev,
-                          reversePowerProtection: { ...prev.reversePowerProtection, actionDelay: Number(e.target.value) }
+                          reversePowerProtection: { ...prev.reversePowerProtection, actionDelay: Math.max(0, Number(e.target.value)) }
                         }))}
                         style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white' }}
                       />
@@ -1884,6 +1888,17 @@ function ProjectConfigWizard({ onNavigate }) {
                             placeholder="可选"
                             value={northboundConfig.username}
                             onChange={(e) => setNorthboundConfig(prev => ({ ...prev, username: e.target.value }))}
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>密码</label>
+                          <input
+                            type="password"
+                            className="form-input"
+                            placeholder="可选"
+                            value={northboundConfig.password}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, password: e.target.value }))}
                             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
                           />
                         </div>

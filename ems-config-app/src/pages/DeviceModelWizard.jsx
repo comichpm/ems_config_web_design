@@ -1059,44 +1059,56 @@ function DeviceModelWizard({ onNavigate }) {
                 </div>
                 {formData.selectedPointTable && (
                   <div className="point-table-selector" style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                    <table style={{ width: '100%', fontSize: '12px' }}>
-                      <thead>
-                        <tr>
-                          {/* 根据协议类型显示不同的列 */}
-                          {formData.protocolType.startsWith('modbus') && <th>地址</th>}
-                          {formData.protocolType === 'iec61850' && <th>引用路径</th>}
-                          {formData.protocolType === 'iec104' && <th>IOA</th>}
-                          {formData.protocolType === 'can' && <th>CAN ID</th>}
-                          {formData.protocolType.startsWith('dlt645') && <th>数据标识</th>}
-                          {formData.protocolType === 'opc' && <th>节点ID</th>}
-                          <th>名称</th>
-                          <th>数据类型</th>
-                          <th>读写</th>
-                          <th>说明</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {getCurrentPointTableData().map((point, index) => (
-                          <tr key={index}>
-                            {/* 根据协议类型显示不同的地址/标识列 */}
-                            {formData.protocolType.startsWith('modbus') && <td>{point.address}</td>}
-                            {formData.protocolType === 'iec61850' && <td style={{ fontSize: '11px' }}>{point.reference}</td>}
-                            {formData.protocolType === 'iec104' && <td>{point.ioa}</td>}
-                            {formData.protocolType === 'can' && <td>{point.canId}</td>}
-                            {formData.protocolType.startsWith('dlt645') && <td>{point.dataId}</td>}
-                            {formData.protocolType === 'opc' && <td style={{ fontSize: '11px' }}>{point.nodeId}</td>}
-                            <td>{point.name}</td>
-                            <td>{point.type}</td>
-                            <td>
-                              <span className={`tag ${point.rw === 'R' ? 'tag-gray' : 'tag-blue'}`}>
-                                {point.rw || '-'}
-                              </span>
-                            </td>
-                            <td>{point.description}</td>
+                    {getCurrentPointTableData().length === 0 ? (
+                      <div style={{ 
+                        padding: '30px', 
+                        textAlign: 'center', 
+                        color: 'var(--gray-400)',
+                        border: '1px dashed var(--gray-300)',
+                        borderRadius: '8px'
+                      }}>
+                        该点表暂无配置的点位
+                      </div>
+                    ) : (
+                      <table style={{ width: '100%', fontSize: '12px' }}>
+                        <thead>
+                          <tr>
+                            {/* 根据协议类型显示不同的列 */}
+                            {formData.protocolType.startsWith('modbus') && <th>地址</th>}
+                            {formData.protocolType === 'iec61850' && <th>引用路径</th>}
+                            {formData.protocolType === 'iec104' && <th>IOA</th>}
+                            {formData.protocolType === 'can' && <th>CAN ID</th>}
+                            {formData.protocolType.startsWith('dlt645') && <th>数据标识</th>}
+                            {formData.protocolType === 'opc' && <th>节点ID</th>}
+                            <th>名称</th>
+                            <th>数据类型</th>
+                            <th>读写</th>
+                            <th>说明</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {getCurrentPointTableData().map((point, index) => (
+                            <tr key={index}>
+                              {/* 根据协议类型显示不同的地址/标识列 */}
+                              {formData.protocolType.startsWith('modbus') && <td>{point.address}</td>}
+                              {formData.protocolType === 'iec61850' && <td style={{ fontSize: '11px' }}>{point.reference}</td>}
+                              {formData.protocolType === 'iec104' && <td>{point.ioa}</td>}
+                              {formData.protocolType === 'can' && <td>{point.canId}</td>}
+                              {formData.protocolType.startsWith('dlt645') && <td>{point.dataId}</td>}
+                              {formData.protocolType === 'opc' && <td style={{ fontSize: '11px' }}>{point.nodeId}</td>}
+                              <td>{point.name}</td>
+                              <td>{point.type}</td>
+                              <td>
+                                <span className={`tag ${point.rw === 'R' ? 'tag-gray' : 'tag-blue'}`}>
+                                  {point.rw || '-'}
+                                </span>
+                              </td>
+                              <td>{point.description}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 )}
                 {getAvailablePointTables().length === 0 && !formData.selectedPointTable && (
