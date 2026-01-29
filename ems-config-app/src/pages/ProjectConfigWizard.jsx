@@ -22,7 +22,8 @@ const STEPS = [
   { id: 2, name: '设备选择' },
   { id: 3, name: '参数微调' },
   { id: 4, name: '电气拓扑' },
-  { id: 5, name: '算法&北向' }
+  { id: 5, name: '算法策略' },
+  { id: 6, name: '北向配置' }
 ];
 
 // 自定义节点样式
@@ -41,6 +42,7 @@ function ProjectConfigWizard({ onNavigate }) {
   const [completed, setCompleted] = useState(false);
   const [validationResults, setValidationResults] = useState([]);
   const fileInputRef = useRef(null);
+  const northboundFileInputRef = useRef(null);
   
   // 工程信息
   const [projectInfo, setProjectInfo] = useState({
@@ -65,7 +67,7 @@ function ProjectConfigWizard({ onNavigate }) {
   // 算法策略配置
   const [algorithmConfig, setAlgorithmConfig] = useState(algorithmDefaults);
 
-  // 北向配置
+  // 北向配置 - 增强版
   const [northboundConfig, setNorthboundConfig] = useState({
     enabled: false,
     protocol: 'mqtt',
@@ -73,8 +75,20 @@ function ProjectConfigWizard({ onNavigate }) {
     serverPort: 1883,
     topic: 'ems/data',
     username: '',
-    password: '',
-    publishInterval: 5000
+    clientId: 'ems_client_001',
+    keepAlive: 60,
+    qos: 1,
+    publishInterval: 5000,
+    // 增强配置
+    heartbeatInterval: 30,
+    reconnectInterval: 5000,
+    maxReconnectAttempts: 10,
+    dataFormat: 'json',
+    compression: false,
+    encryption: false,
+    // 点表配置
+    pointTableEnabled: true,
+    pointTableMapping: []
   });
 
   // 加载已保存的物模型
@@ -92,23 +106,69 @@ function ProjectConfigWizard({ onNavigate }) {
     setProjectInfo(prev => ({ ...prev, [field]: value }));
   };
 
+  // 添加单个设备实例
   const handleAddDevice = (model) => {
+    const existingCount = selectedDevices.filter(d => d.id === model.id).length;
     const newDevice = {
       ...model,
       instanceId: `${model.id}_${Date.now()}`,
-      instanceName: `${model.modelName}_${selectedDevices.filter(d => d.id === model.id).length + 1}`
+      instanceName: `${model.modelName}_${existingCount + 1}`,
+      instanceIndex: existingCount + 1
     };
     setSelectedDevices(prev => [...prev, newDevice]);
     
-    // 初始化设备参数
+    // 初始化设备参数 - 增强版
+    const ipLastOctet = Math.min(100 + existingCount, 254);
     setDeviceParams(prev => ({
       ...prev,
       [newDevice.instanceId]: {
-        slaveAddress: 1,
-        port: 'COM1',
-        ip: '192.168.1.100'
+        slaveAddress: existingCount + 1,
+        port: `COM${(existingCount % 10) + 1}`,
+        ip: `192.168.1.${ipLastOctet}`,
+        // 增强参数
+        timeout: 3000,
+        retries: 3,
+        pollInterval: 1000,
+        enabled: true,
+        alias: '',
+        location: '',
+        notes: ''
       }
     }));
+  };
+
+  // 批量添加设备实例
+  const handleBatchAddDevice = (model, count) => {
+    const existingCount = selectedDevices.filter(d => d.id === model.id).length;
+    const newDevices = [];
+    const newParams = {};
+    
+    for (let i = 0; i < count; i++) {
+      const instanceIndex = existingCount + i + 1;
+      const instanceId = `${model.id}_${Date.now()}_${i}`;
+      const ipLastOctet = Math.min(100 + existingCount + i, 254);
+      newDevices.push({
+        ...model,
+        instanceId,
+        instanceName: `${model.modelName}_${instanceIndex}`,
+        instanceIndex
+      });
+      newParams[instanceId] = {
+        slaveAddress: instanceIndex,
+        port: `COM${((instanceIndex - 1) % 10) + 1}`,
+        ip: `192.168.1.${ipLastOctet}`,
+        timeout: 3000,
+        retries: 3,
+        pollInterval: 1000,
+        enabled: true,
+        alias: '',
+        location: '',
+        notes: ''
+      };
+    }
+    
+    setSelectedDevices(prev => [...prev, ...newDevices]);
+    setDeviceParams(prev => ({ ...prev, ...newParams }));
   };
 
   const handleRemoveDevice = (instanceId) => {
@@ -121,6 +181,12 @@ function ProjectConfigWizard({ onNavigate }) {
     // 从拓扑中移除节点
     setNodes(prev => prev.filter(n => n.id !== instanceId));
     setEdges(prev => prev.filter(e => e.source !== instanceId && e.target !== instanceId));
+  };
+
+  // 删除拓扑中的设备节点
+  const handleDeleteTopologyNode = (nodeId) => {
+    setNodes(prev => prev.filter(n => n.id !== nodeId));
+    setEdges(prev => prev.filter(e => e.source !== nodeId && e.target !== nodeId));
   };
 
   const handleDeviceParamChange = (instanceId, field, value) => {
@@ -213,7 +279,7 @@ function ProjectConfigWizard({ onNavigate }) {
   };
 
   const handleNext = () => {
-    if (currentStep < 5) {
+    if (currentStep < 6) {
       setCurrentStep(currentStep + 1);
     } else {
       handleValidateAndComplete();
@@ -224,6 +290,73 @@ function ProjectConfigWizard({ onNavigate }) {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     }
+  };
+
+  // 北向点表导入
+  const handleNorthboundPointTableImport = (e) => {
+    const file = e.target.files?.[0];
+    // Reset file input immediately
+    e.target.value = '';
+    
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const pointTable = JSON.parse(event.target.result);
+          if (Array.isArray(pointTable)) {
+            // Validate and normalize point table entries
+            const validatedPoints = pointTable.map((point, index) => ({
+              id: point.id || Date.now() + index,
+              sourcePath: point.sourcePath || '',
+              targetPath: point.targetPath || '',
+              dataType: point.dataType || 'float',
+              scale: typeof point.scale === 'number' ? point.scale : 1,
+              offset: typeof point.offset === 'number' ? point.offset : 0,
+              enabled: point.enabled !== false
+            }));
+            setNorthboundConfig(prev => ({
+              ...prev,
+              pointTableMapping: validatedPoints
+            }));
+            alert(`成功导入 ${validatedPoints.length} 个点位配置`);
+          } else {
+            alert('点表格式错误，请使用数组格式');
+          }
+        } catch (err) {
+          alert('点表文件解析失败');
+        }
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  // 计数器用于生成唯一ID
+  const pointIdCounter = React.useRef(0);
+
+  // 添加北向点位
+  const handleAddNorthboundPoint = () => {
+    pointIdCounter.current += 1;
+    const newPoint = {
+      id: `point_${Date.now()}_${pointIdCounter.current}`,
+      sourcePath: '',
+      targetPath: '',
+      dataType: 'float',
+      scale: 1,
+      offset: 0,
+      enabled: true
+    };
+    setNorthboundConfig(prev => ({
+      ...prev,
+      pointTableMapping: [...prev.pointTableMapping, newPoint]
+    }));
+  };
+
+  // 删除北向点位
+  const handleDeleteNorthboundPoint = (pointId) => {
+    setNorthboundConfig(prev => ({
+      ...prev,
+      pointTableMapping: prev.pointTableMapping.filter(p => p.id !== pointId)
+    }));
   };
 
   const handleValidateAndComplete = () => {
@@ -462,7 +595,7 @@ function ProjectConfigWizard({ onNavigate }) {
           {/* 步骤1: 工程基础信息 */}
           {currentStep === 1 && (
             <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 1/5：工程基础信息</h3>
+              <h3 style={{ marginBottom: '20px' }}>步骤 1/6：工程基础信息</h3>
               <div className="notice-banner info">
                 <span>💡</span>
                 <span>填写项目基本信息，便于后续管理和维护</span>
@@ -532,7 +665,11 @@ function ProjectConfigWizard({ onNavigate }) {
           {/* 步骤2: 物模型选择 */}
           {currentStep === 2 && (
             <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 2/5：选择设备物模型</h3>
+              <h3 style={{ marginBottom: '20px' }}>步骤 2/6：选择设备物模型</h3>
+              <div className="notice-banner info">
+                <span>💡</span>
+                <span>可以批量添加相同类型的多个设备实例，系统会自动分配端口和地址</span>
+              </div>
               
               <div style={{ display: 'flex', gap: '24px' }}>
                 {/* 左侧：物模型库 */}
@@ -555,11 +692,11 @@ function ProjectConfigWizard({ onNavigate }) {
                       {deviceModels.map(model => {
                         const category = deviceCategories.find(c => c.id === model.deviceCategory);
                         const device = category?.devices.find(d => d.id === model.deviceType);
+                        const existingCount = selectedDevices.filter(d => d.id === model.id).length;
                         return (
                           <div
                             key={model.id}
                             className="device-card"
-                            onClick={() => handleAddDevice(model)}
                             style={{ cursor: 'pointer' }}
                           >
                             <div className="device-card-icon">{device?.icon || '📦'}</div>
@@ -567,9 +704,41 @@ function ProjectConfigWizard({ onNavigate }) {
                             <div className="device-card-desc">
                               {model.manufacturer} | {model.voltageLevel?.toUpperCase()}
                             </div>
-                            <button className="btn btn-sm btn-primary" style={{ marginTop: '8px', width: '100%' }}>
-                              ➕ 添加
-                            </button>
+                            {existingCount > 0 && (
+                              <div style={{ 
+                                fontSize: '11px', 
+                                color: 'var(--primary)', 
+                                marginTop: '4px' 
+                              }}>
+                                已添加 {existingCount} 个
+                              </div>
+                            )}
+                            <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+                              <button 
+                                className="btn btn-sm btn-primary" 
+                                style={{ flex: 1 }}
+                                onClick={() => handleAddDevice(model)}
+                              >
+                                ➕ 添加1个
+                              </button>
+                              <select
+                                className="form-select"
+                                style={{ width: '70px', padding: '4px 6px', fontSize: '12px' }}
+                                defaultValue=""
+                                onChange={(e) => {
+                                  if (e.target.value) {
+                                    handleBatchAddDevice(model, parseInt(e.target.value));
+                                    e.target.value = '';
+                                  }
+                                }}
+                              >
+                                <option value="">批量</option>
+                                <option value="2">+2</option>
+                                <option value="3">+3</option>
+                                <option value="5">+5</option>
+                                <option value="10">+10</option>
+                              </select>
+                            </div>
                           </div>
                         );
                       })}
@@ -578,7 +747,7 @@ function ProjectConfigWizard({ onNavigate }) {
                 </div>
 
                 {/* 右侧：已选设备 */}
-                <div style={{ width: '300px' }}>
+                <div style={{ width: '350px' }}>
                   <h4 style={{ marginBottom: '12px', color: 'var(--gray-700)' }}>
                     已选设备 ({selectedDevices.length})
                   </h4>
@@ -593,7 +762,7 @@ function ProjectConfigWizard({ onNavigate }) {
                       点击左侧物模型添加设备
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
                       {selectedDevices.map(device => (
                         <div
                           key={device.instanceId}
@@ -607,10 +776,21 @@ function ProjectConfigWizard({ onNavigate }) {
                             border: '1px solid var(--gray-200)'
                           }}
                         >
-                          <div>
-                            <div style={{ fontWeight: '500' }}>{device.instanceName}</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: '500', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              {device.instanceName}
+                              <span style={{ 
+                                fontSize: '10px', 
+                                background: 'var(--primary)', 
+                                color: 'white',
+                                padding: '2px 6px',
+                                borderRadius: '10px'
+                              }}>
+                                #{device.instanceIndex}
+                              </span>
+                            </div>
                             <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>
-                              {device.manufacturer}
+                              {device.manufacturer} | 地址: {deviceParams[device.instanceId]?.slaveAddress}
                             </div>
                           </div>
                           <button
@@ -642,10 +822,10 @@ function ProjectConfigWizard({ onNavigate }) {
           {/* 步骤3: 参数微调 */}
           {currentStep === 3 && (
             <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 3/5：现场参数微调</h3>
+              <h3 style={{ marginBottom: '20px' }}>步骤 3/6：现场参数微调</h3>
               <div className="notice-banner info">
                 <span>💡</span>
-                <span>以下仅展示现场差异化参数，其余配置复用物模型默认值</span>
+                <span>以下仅展示现场差异化参数，其余配置复用物模型默认值。批量添加的设备已自动分配不同的端口和地址。</span>
               </div>
 
               {selectedDevices.length === 0 ? (
@@ -660,12 +840,29 @@ function ProjectConfigWizard({ onNavigate }) {
                     <div key={device.instanceId} className="collapse-panel">
                       <div className="collapse-header">
                         <span style={{ fontWeight: '600' }}>{device.instanceName}</span>
-                        <span className="tag tag-blue">{device.protocolType}</span>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <span className="tag tag-blue">{device.protocolType || 'modbus_rtu'}</span>
+                          <span className={`tag ${deviceParams[device.instanceId]?.enabled !== false ? 'tag-green' : 'tag-gray'}`}>
+                            {deviceParams[device.instanceId]?.enabled !== false ? '已启用' : '已禁用'}
+                          </span>
+                        </div>
                       </div>
                       <div className="collapse-content">
+                        {/* 启用开关 */}
+                        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                            <input
+                              type="checkbox"
+                              checked={deviceParams[device.instanceId]?.enabled !== false}
+                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'enabled', e.target.checked)}
+                            />
+                            启用此设备
+                          </label>
+                        </div>
+                        
                         <div className="form-row form-row-3">
                           {/* 根据协议类型显示不同的参数 */}
-                          {(device.protocolType === 'modbus_rtu' || device.channelType === 'serial') && (
+                          {(device.protocolType === 'modbus_rtu' || device.channelType === 'serial' || !device.protocolType) && (
                             <>
                               <div className="form-group" style={{ marginBottom: 0 }}>
                                 <label className="form-label">串口端口</label>
@@ -674,10 +871,13 @@ function ProjectConfigWizard({ onNavigate }) {
                                   value={deviceParams[device.instanceId]?.port || 'COM1'}
                                   onChange={(e) => handleDeviceParamChange(device.instanceId, 'port', e.target.value)}
                                 >
-                                  <option>COM1</option>
-                                  <option>COM2</option>
-                                  <option>COM3</option>
-                                  <option>COM4</option>
+                                  {[...Array(10)].map((_, i) => (
+                                    <option key={i} value={`COM${i + 1}`}>COM{i + 1}</option>
+                                  ))}
+                                  <option value="/dev/ttyS0">/dev/ttyS0</option>
+                                  <option value="/dev/ttyS1">/dev/ttyS1</option>
+                                  <option value="/dev/ttyUSB0">/dev/ttyUSB0</option>
+                                  <option value="/dev/ttyUSB1">/dev/ttyUSB1</option>
                                 </select>
                               </div>
                               <div className="form-group" style={{ marginBottom: 0 }}>
@@ -732,9 +932,84 @@ function ProjectConfigWizard({ onNavigate }) {
                             />
                           </div>
                         </div>
-                        <div style={{ marginTop: '12px' }}>
+                        
+                        {/* 增强参数 */}
+                        <div className="form-row form-row-3" style={{ marginTop: '16px' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">超时时间 (ms)</label>
+                            <input
+                              type="number"
+                              className="form-input"
+                              value={deviceParams[device.instanceId]?.timeout || 3000}
+                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'timeout', Number(e.target.value))}
+                            />
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">重试次数</label>
+                            <input
+                              type="number"
+                              className="form-input"
+                              min="0"
+                              max="10"
+                              value={deviceParams[device.instanceId]?.retries || 3}
+                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'retries', Number(e.target.value))}
+                            />
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">轮询周期 (ms)</label>
+                            <input
+                              type="number"
+                              className="form-input"
+                              value={deviceParams[device.instanceId]?.pollInterval || 1000}
+                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'pollInterval', Number(e.target.value))}
+                            />
+                          </div>
+                        </div>
+                        
+                        {/* 位置和备注 */}
+                        <div className="form-row" style={{ marginTop: '16px' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">设备别名</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="如: 1号电池柜"
+                              value={deviceParams[device.instanceId]?.alias || ''}
+                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'alias', e.target.value)}
+                            />
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">安装位置</label>
+                            <input
+                              type="text"
+                              className="form-input"
+                              placeholder="如: 配电室A区"
+                              value={deviceParams[device.instanceId]?.location || ''}
+                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'location', e.target.value)}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="form-group" style={{ marginTop: '12px', marginBottom: 0 }}>
+                          <label className="form-label">备注</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder="其他说明信息"
+                            value={deviceParams[device.instanceId]?.notes || ''}
+                            onChange={(e) => handleDeviceParamChange(device.instanceId, 'notes', e.target.value)}
+                          />
+                        </div>
+                        
+                        <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
                           <button className="btn btn-secondary btn-sm">
                             🔍 测试连通性
+                          </button>
+                          <button 
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleRemoveDevice(device.instanceId)}
+                          >
+                            🗑️ 删除设备
                           </button>
                         </div>
                       </div>
@@ -748,10 +1023,10 @@ function ProjectConfigWizard({ onNavigate }) {
           {/* 步骤4: 电气拓扑 */}
           {currentStep === 4 && (
             <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 4/5：电气拓扑配置</h3>
+              <h3 style={{ marginBottom: '20px' }}>步骤 4/6：电气拓扑配置</h3>
               <div className="notice-banner info">
                 <span>💡</span>
-                <span>将左侧设备拖拽到画布，然后从设备边缘拖动连线建立电气关系</span>
+                <span>将左侧设备拖拽到画布，从设备边缘拖动连线建立电气关系。点击画布上的设备可删除。</span>
               </div>
 
               <div className="topology-container">
@@ -777,12 +1052,30 @@ function ProjectConfigWizard({ onNavigate }) {
                         }}
                       >
                         <span style={{ fontSize: '20px' }}>{category?.icon || '📦'}</span>
-                        <div>
+                        <div style={{ flex: 1 }}>
                           <div style={{ fontSize: '13px', fontWeight: '500' }}>{device.instanceName}</div>
                           <div style={{ fontSize: '11px', color: 'var(--gray-500)' }}>
                             {isOnCanvas ? '已在画布' : '拖拽到画布'}
                           </div>
                         </div>
+                        {isOnCanvas && (
+                          <button
+                            className="btn btn-sm"
+                            style={{ 
+                              padding: '2px 6px', 
+                              fontSize: '10px',
+                              background: '#fee2e2',
+                              color: '#dc2626',
+                              border: 'none'
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteTopologyNode(device.instanceId);
+                            }}
+                          >
+                            移除
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -795,6 +1088,16 @@ function ProjectConfigWizard({ onNavigate }) {
                       fontSize: '13px'
                     }}>
                       暂无设备，请返回上一步添加
+                    </div>
+                  )}
+                  
+                  {/* 画布上的设备列表 */}
+                  {nodes.length > 0 && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div className="topology-sidebar-title">画布上的设备 ({nodes.length})</div>
+                      <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginBottom: '8px' }}>
+                        点击"移除"可从画布删除设备
+                      </div>
                     </div>
                   )}
                 </div>
@@ -810,6 +1113,14 @@ function ProjectConfigWizard({ onNavigate }) {
                       onConnect={onConnect}
                       onDrop={onDrop}
                       onDragOver={onDragOver}
+                      onNodeClick={(event, node) => {
+                        // 双击删除节点
+                        if (event.detail === 2) {
+                          if (window.confirm(`确定从画布移除设备 "${node.id}" 吗？`)) {
+                            handleDeleteTopologyNode(node.id);
+                          }
+                        }
+                      }}
                       fitView
                       style={{ background: '#f8fafc' }}
                     >
@@ -821,12 +1132,23 @@ function ProjectConfigWizard({ onNavigate }) {
                 </div>
               </div>
 
-              <div style={{ marginTop: '16px', display: 'flex', gap: '12px' }}>
+              <div style={{ marginTop: '16px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <button className="btn btn-secondary" onClick={handleAutoLayout}>
                   📐 自动布局
                 </button>
                 <button className="btn btn-secondary" onClick={() => setEdges([])}>
-                  🗑️ 清除连线
+                  🔗 清除连线
+                </button>
+                <button 
+                  className="btn btn-danger" 
+                  onClick={() => {
+                    if (window.confirm('确定清空画布上的所有设备和连线吗？')) {
+                      setNodes([]);
+                      setEdges([]);
+                    }
+                  }}
+                >
+                  🗑️ 清空画布
                 </button>
                 <button className="btn btn-secondary" onClick={() => {
                   // 拓扑校验
@@ -844,10 +1166,14 @@ function ProjectConfigWizard({ onNavigate }) {
             </div>
           )}
 
-          {/* 步骤5: 算法策略&北向配置 */}
+          {/* 步骤5: 算法策略 */}
           {currentStep === 5 && (
             <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 5/5：算法策略&北向配置</h3>
+              <h3 style={{ marginBottom: '20px' }}>步骤 5/6：算法策略配置</h3>
+              <div className="notice-banner info">
+                <span>💡</span>
+                <span>配置储能系统的运行策略，包括削峰填谷、需量控制和SOC管理等</span>
+              </div>
 
               {/* 算法策略配置 */}
               <div className="param-card" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
@@ -975,6 +1301,18 @@ function ProjectConfigWizard({ onNavigate }) {
                         }))}
                       />
                     </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">响应时间 (s)</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={algorithmConfig.demandControl.responseTime}
+                        onChange={(e) => setAlgorithmConfig(prev => ({
+                          ...prev,
+                          demandControl: { ...prev.demandControl, responseTime: Number(e.target.value) }
+                        }))}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -1036,10 +1374,79 @@ function ProjectConfigWizard({ onNavigate }) {
                 </div>
               </div>
 
+              {/* 功率控制 */}
+              <div className="param-card">
+                <div className="param-card-title">
+                  <span>⚙️</span> 功率控制参数
+                </div>
+                <div className="param-grid">
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">功率变化率 (kW/min)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={algorithmConfig.powerControl.rampRate}
+                      onChange={(e) => setAlgorithmConfig(prev => ({
+                        ...prev,
+                        powerControl: { ...prev.powerControl, rampRate: Number(e.target.value) }
+                      }))}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">最大充电功率 (kW)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={algorithmConfig.powerControl.maxChargePower}
+                      onChange={(e) => setAlgorithmConfig(prev => ({
+                        ...prev,
+                        powerControl: { ...prev.powerControl, maxChargePower: Number(e.target.value) }
+                      }))}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">最大放电功率 (kW)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      value={algorithmConfig.powerControl.maxDischargePower}
+                      onChange={(e) => setAlgorithmConfig(prev => ({
+                        ...prev,
+                        powerControl: { ...prev.powerControl, maxDischargePower: Number(e.target.value) }
+                      }))}
+                    />
+                  </div>
+                  <div className="form-group" style={{ marginBottom: 0 }}>
+                    <label className="form-label">功率因数</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      step="0.01"
+                      value={algorithmConfig.powerControl.powerFactor}
+                      onChange={(e) => setAlgorithmConfig(prev => ({
+                        ...prev,
+                        powerControl: { ...prev.powerControl, powerFactor: Number(e.target.value) }
+                      }))}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 步骤6: 北向配置 */}
+          {currentStep === 6 && (
+            <div>
+              <h3 style={{ marginBottom: '20px' }}>步骤 6/6：北向接口配置</h3>
+              <div className="notice-banner info">
+                <span>💡</span>
+                <span>配置数据上报到上级平台的接口参数，包括协议、地址、点表映射等</span>
+              </div>
+
               {/* 北向配置 */}
               <div className="param-card" style={{ background: '#1e3a5f', color: 'white' }}>
                 <div className="param-card-title" style={{ color: 'white' }}>
-                  <span>🌐</span> 北向接口配置
+                  <span>🌐</span> 北向接口基础配置
                 </div>
                 <div style={{ marginBottom: '16px' }}>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
@@ -1053,60 +1460,64 @@ function ProjectConfigWizard({ onNavigate }) {
                 </div>
                 
                 {northboundConfig.enabled && (
-                  <div className="param-grid">
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>协议类型</label>
-                      <select
-                        className="form-select"
-                        value={northboundConfig.protocol}
-                        onChange={(e) => {
-                          const protocol = northboundProtocols.find(p => p.id === e.target.value);
-                          setNorthboundConfig(prev => ({
-                            ...prev,
-                            protocol: e.target.value,
-                            serverPort: protocol?.port || 1883
-                          }));
-                        }}
-                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                      >
-                        {northboundProtocols.map(p => (
-                          <option key={p.id} value={p.id} style={{ color: 'black' }}>{p.name}</option>
-                        ))}
-                      </select>
+                  <>
+                    <div className="param-grid">
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>协议类型</label>
+                        <select
+                          className="form-select"
+                          value={northboundConfig.protocol}
+                          onChange={(e) => {
+                            const protocol = northboundProtocols.find(p => p.id === e.target.value);
+                            setNorthboundConfig(prev => ({
+                              ...prev,
+                              protocol: e.target.value,
+                              serverPort: protocol?.port || 1883
+                            }));
+                          }}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                        >
+                          {northboundProtocols.map(p => (
+                            <option key={p.id} value={p.id} style={{ color: 'black' }}>{p.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>服务器地址</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="192.168.1.200"
+                          value={northboundConfig.serverIp}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, serverIp: e.target.value }))}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>端口号</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.serverPort}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, serverPort: Number(e.target.value) }))}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>上报周期 (ms)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.publishInterval}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, publishInterval: Number(e.target.value) }))}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                        />
+                      </div>
                     </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>服务器地址</label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="192.168.1.200"
-                        value={northboundConfig.serverIp}
-                        onChange={(e) => setNorthboundConfig(prev => ({ ...prev, serverIp: e.target.value }))}
-                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>端口号</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={northboundConfig.serverPort}
-                        onChange={(e) => setNorthboundConfig(prev => ({ ...prev, serverPort: Number(e.target.value) }))}
-                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>上报周期 (ms)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={northboundConfig.publishInterval}
-                        onChange={(e) => setNorthboundConfig(prev => ({ ...prev, publishInterval: Number(e.target.value) }))}
-                        style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                      />
-                    </div>
+                    
+                    {/* MQTT特定配置 */}
                     {northboundConfig.protocol === 'mqtt' && (
-                      <>
+                      <div className="param-grid" style={{ marginTop: '16px' }}>
                         <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Topic</label>
                           <input
@@ -1115,6 +1526,39 @@ function ProjectConfigWizard({ onNavigate }) {
                             placeholder="ems/data"
                             value={northboundConfig.topic}
                             onChange={(e) => setNorthboundConfig(prev => ({ ...prev, topic: e.target.value }))}
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Client ID</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={northboundConfig.clientId}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, clientId: e.target.value }))}
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>QoS等级</label>
+                          <select
+                            className="form-select"
+                            value={northboundConfig.qos}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, qos: Number(e.target.value) }))}
+                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                          >
+                            <option value={0} style={{ color: 'black' }}>QoS 0 - 最多一次</option>
+                            <option value={1} style={{ color: 'black' }}>QoS 1 - 至少一次</option>
+                            <option value={2} style={{ color: 'black' }}>QoS 2 - 恰好一次</option>
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Keep Alive (s)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.keepAlive}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, keepAlive: Number(e.target.value) }))}
                             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
                           />
                         </div>
@@ -1129,11 +1573,214 @@ function ProjectConfigWizard({ onNavigate }) {
                             style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
                           />
                         </div>
-                      </>
+                      </div>
                     )}
-                  </div>
+                    
+                    {/* 高级配置 */}
+                    <div className="param-grid" style={{ marginTop: '16px' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>心跳间隔 (s)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.heartbeatInterval}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, heartbeatInterval: Number(e.target.value) }))}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>重连间隔 (ms)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.reconnectInterval}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, reconnectInterval: Number(e.target.value) }))}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>最大重连次数</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.maxReconnectAttempts}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, maxReconnectAttempts: Number(e.target.value) }))}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>数据格式</label>
+                        <select
+                          className="form-select"
+                          value={northboundConfig.dataFormat}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, dataFormat: e.target.value }))}
+                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
+                        >
+                          <option value="json" style={{ color: 'black' }}>JSON</option>
+                          <option value="xml" style={{ color: 'black' }}>XML</option>
+                          <option value="binary" style={{ color: 'black' }}>Binary</option>
+                        </select>
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
+
+              {/* 点表配置 */}
+              {northboundConfig.enabled && (
+                <div className="param-card">
+                  <div className="param-card-title">
+                    <span>📋</span> 点表映射配置
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                      <input
+                        type="file"
+                        ref={northboundFileInputRef}
+                        onChange={handleNorthboundPointTableImport}
+                        accept=".json"
+                        style={{ display: 'none' }}
+                      />
+                      <button 
+                        className="btn btn-sm btn-secondary"
+                        onClick={() => northboundFileInputRef.current?.click()}
+                      >
+                        📥 导入点表
+                      </button>
+                      <button 
+                        className="btn btn-sm btn-primary"
+                        onClick={handleAddNorthboundPoint}
+                      >
+                        ➕ 添加点位
+                      </button>
+                    </div>
+                  </div>
+                  <div style={{ marginBottom: '16px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={northboundConfig.pointTableEnabled}
+                        onChange={(e) => setNorthboundConfig(prev => ({ ...prev, pointTableEnabled: e.target.checked }))}
+                      />
+                      <span>启用点表映射</span>
+                    </label>
+                  </div>
+                  
+                  {northboundConfig.pointTableEnabled && (
+                    <div>
+                      {northboundConfig.pointTableMapping.length === 0 ? (
+                        <div style={{ 
+                          padding: '30px', 
+                          textAlign: 'center', 
+                          color: 'var(--gray-400)',
+                          border: '1px dashed var(--gray-300)',
+                          borderRadius: '8px'
+                        }}>
+                          暂无点位配置，点击"添加点位"或"导入点表"
+                        </div>
+                      ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                            <thead>
+                              <tr style={{ background: 'var(--gray-100)' }}>
+                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--gray-200)' }}>源路径</th>
+                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--gray-200)' }}>目标路径</th>
+                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--gray-200)' }}>数据类型</th>
+                                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid var(--gray-200)' }}>倍率</th>
+                                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid var(--gray-200)' }}>偏移</th>
+                                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid var(--gray-200)' }}>操作</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {northboundConfig.pointTableMapping.map((point, index) => (
+                                <tr key={point.id} style={{ borderBottom: '1px solid var(--gray-100)' }}>
+                                  <td style={{ padding: '6px' }}>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      style={{ padding: '4px 8px', fontSize: '12px' }}
+                                      placeholder="如: pcs/power"
+                                      value={point.sourcePath}
+                                      onChange={(e) => {
+                                        const newMapping = [...northboundConfig.pointTableMapping];
+                                        newMapping[index] = { ...point, sourcePath: e.target.value };
+                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '6px' }}>
+                                    <input
+                                      type="text"
+                                      className="form-input"
+                                      style={{ padding: '4px 8px', fontSize: '12px' }}
+                                      placeholder="如: data/active_power"
+                                      value={point.targetPath}
+                                      onChange={(e) => {
+                                        const newMapping = [...northboundConfig.pointTableMapping];
+                                        newMapping[index] = { ...point, targetPath: e.target.value };
+                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '6px' }}>
+                                    <select
+                                      className="form-select"
+                                      style={{ padding: '4px 8px', fontSize: '12px' }}
+                                      value={point.dataType}
+                                      onChange={(e) => {
+                                        const newMapping = [...northboundConfig.pointTableMapping];
+                                        newMapping[index] = { ...point, dataType: e.target.value };
+                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
+                                      }}
+                                    >
+                                      <option value="float">Float</option>
+                                      <option value="int">Int</option>
+                                      <option value="bool">Bool</option>
+                                      <option value="string">String</option>
+                                    </select>
+                                  </td>
+                                  <td style={{ padding: '6px', width: '80px' }}>
+                                    <input
+                                      type="number"
+                                      className="form-input"
+                                      style={{ padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
+                                      value={point.scale}
+                                      onChange={(e) => {
+                                        const newMapping = [...northboundConfig.pointTableMapping];
+                                        newMapping[index] = { ...point, scale: Number(e.target.value) };
+                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '6px', width: '80px' }}>
+                                    <input
+                                      type="number"
+                                      className="form-input"
+                                      style={{ padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
+                                      value={point.offset}
+                                      onChange={(e) => {
+                                        const newMapping = [...northboundConfig.pointTableMapping];
+                                        newMapping[index] = { ...point, offset: Number(e.target.value) };
+                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
+                                      }}
+                                    />
+                                  </td>
+                                  <td style={{ padding: '6px', textAlign: 'center' }}>
+                                    <button
+                                      className="btn btn-sm btn-danger"
+                                      onClick={() => handleDeleteNorthboundPoint(point.id)}
+                                    >
+                                      删除
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -1151,7 +1798,7 @@ function ProjectConfigWizard({ onNavigate }) {
           </div>
           <div className="wizard-footer-right">
             <button className="btn btn-primary" onClick={handleNext}>
-              {currentStep === 5 ? '✓ 校验并完成' : '下一步 →'}
+              {currentStep === 6 ? '✓ 校验并完成' : '下一步 →'}
             </button>
           </div>
         </div>

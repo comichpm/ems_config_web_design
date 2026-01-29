@@ -1,10 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   deviceCategories,
   protocolTypes,
   channelTypes,
   manufacturers,
+  manufacturersByCategory,
   voltageLevels,
+  voltageLevelsByDevice,
+  deviceBasicAttributes,
+  deviceAdvancedAttributes,
   alarmLevels,
   notificationMethods,
   defaultAlarmRules,
@@ -22,6 +26,7 @@ const STEPS = [
 
 function DeviceModelWizard({ onNavigate }) {
   const [currentStep, setCurrentStep] = useState(1);
+  const customFieldCounter = useRef(0);
   const [formData, setFormData] = useState({
     // 基础信息
     deviceCategory: '',
@@ -30,11 +35,12 @@ function DeviceModelWizard({ onNavigate }) {
     manufacturer: '',
     modelNumber: '',
     description: '',
-    // 设备属性
-    ratedVoltage: 380,
-    ratedCurrent: 100,
-    ratedPower: 50,
-    voltageLevel: '380v',
+    voltageLevel: '',
+    // 自定义字段
+    customFields: [],
+    // 设备属性（动态）
+    basicAttributes: {},
+    advancedAttributes: {},
     // 算法参数（PCS/储能相关）
     adjustThreshold: 220,
     responseTime: 0.5,
@@ -66,6 +72,90 @@ function DeviceModelWizard({ onNavigate }) {
 
   const updateFormData = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  // 获取当前设备分类对应的厂商列表
+  const getCurrentManufacturers = () => {
+    if (formData.deviceCategory && manufacturersByCategory[formData.deviceCategory]) {
+      return manufacturersByCategory[formData.deviceCategory];
+    }
+    return manufacturers;
+  };
+
+  // 获取当前设备类型对应的电压等级
+  const getCurrentVoltageLevels = () => {
+    if (formData.deviceType && voltageLevelsByDevice[formData.deviceType]) {
+      return voltageLevelsByDevice[formData.deviceType];
+    }
+    return voltageLevelsByDevice.default || voltageLevels;
+  };
+
+  // 获取当前设备类型的基础属性配置
+  const getCurrentBasicAttributes = () => {
+    if (formData.deviceType && deviceBasicAttributes[formData.deviceType]) {
+      return deviceBasicAttributes[formData.deviceType];
+    }
+    return deviceBasicAttributes.default || [];
+  };
+
+  // 获取当前设备类型的高级属性配置
+  const getCurrentAdvancedAttributes = () => {
+    if (formData.deviceType && deviceAdvancedAttributes[formData.deviceType]) {
+      return deviceAdvancedAttributes[formData.deviceType];
+    }
+    return deviceAdvancedAttributes.default || [];
+  };
+
+  // 初始化设备属性（当设备类型变化时）
+  const initializeDeviceAttributes = (deviceType) => {
+    const basicAttrs = deviceBasicAttributes[deviceType] || deviceBasicAttributes.default || [];
+    const advancedAttrs = deviceAdvancedAttributes[deviceType] || deviceAdvancedAttributes.default || [];
+    
+    const newBasicAttributes = {};
+    basicAttrs.forEach(attr => {
+      newBasicAttributes[attr.key] = attr.default;
+    });
+    
+    const newAdvancedAttributes = {};
+    advancedAttrs.forEach(attr => {
+      newAdvancedAttributes[attr.key] = attr.default;
+    });
+    
+    // 设置默认电压等级
+    const voltageLevelsForDevice = voltageLevelsByDevice[deviceType] || voltageLevelsByDevice.default;
+    const defaultVoltageLevel = voltageLevelsForDevice?.[0]?.id || '380v';
+    
+    setFormData(prev => ({
+      ...prev,
+      basicAttributes: newBasicAttributes,
+      advancedAttributes: newAdvancedAttributes,
+      voltageLevel: defaultVoltageLevel
+    }));
+  };
+
+  // 添加自定义字段
+  const handleAddCustomField = () => {
+    customFieldCounter.current += 1;
+    const newField = {
+      id: `custom_${Date.now()}_${customFieldCounter.current}`,
+      name: '',
+      value: '',
+      unit: ''
+    };
+    updateFormData('customFields', [...formData.customFields, newField]);
+  };
+
+  // 更新自定义字段
+  const handleUpdateCustomField = (index, field, value) => {
+    const newFields = [...formData.customFields];
+    newFields[index] = { ...newFields[index], [field]: value };
+    updateFormData('customFields', newFields);
+  };
+
+  // 删除自定义字段
+  const handleDeleteCustomField = (index) => {
+    const newFields = formData.customFields.filter((_, i) => i !== index);
+    updateFormData('customFields', newFields);
   };
 
   const handleNext = () => {
@@ -259,7 +349,7 @@ function DeviceModelWizard({ onNavigate }) {
               <h3 style={{ marginBottom: '20px' }}>步骤 1/5：基础信息配置</h3>
               <div className="notice-banner info">
                 <span>💡</span>
-                <span>选择设备类型后，系统将自动加载对应的属性配置项和默认值</span>
+                <span>选择设备类型后，系统将自动加载对应的厂商、电压等级和属性配置</span>
               </div>
               
               <div className="form-group">
@@ -272,6 +362,10 @@ function DeviceModelWizard({ onNavigate }) {
                   onChange={(e) => {
                     updateFormData('deviceCategory', e.target.value);
                     updateFormData('deviceType', '');
+                    updateFormData('manufacturer', '');
+                    updateFormData('voltageLevel', '');
+                    updateFormData('basicAttributes', {});
+                    updateFormData('advancedAttributes', {});
                   }}
                 >
                   <option value="">请选择设备分类</option>
@@ -295,7 +389,10 @@ function DeviceModelWizard({ onNavigate }) {
                           className={`device-card ${formData.deviceType === device.id ? 'selected' : ''}`}
                           onClick={() => {
                             updateFormData('deviceType', device.id);
-                            updateFormData('modelName', `${device.name}-${manufacturers[0]}`);
+                            const currentMfrs = manufacturersByCategory[formData.deviceCategory] || manufacturers;
+                            const defaultMfr = currentMfrs.length > 0 ? currentMfrs[0] : '其他';
+                            updateFormData('modelName', `${device.name}-${defaultMfr}`);
+                            initializeDeviceAttributes(device.id);
                           }}
                         >
                           <div className="device-card-icon">{device.icon}</div>
@@ -331,10 +428,11 @@ function DeviceModelWizard({ onNavigate }) {
                     onChange={(e) => updateFormData('manufacturer', e.target.value)}
                   >
                     <option value="">请选择厂商</option>
-                    {manufacturers.map(m => (
+                    {getCurrentManufacturers().map(m => (
                       <option key={m} value={m}>{m}</option>
                     ))}
                   </select>
+                  <div className="form-hint">厂商列表已根据设备分类自动过滤</div>
                 </div>
               </div>
 
@@ -356,10 +454,15 @@ function DeviceModelWizard({ onNavigate }) {
                     value={formData.voltageLevel}
                     onChange={(e) => updateFormData('voltageLevel', e.target.value)}
                   >
-                    {voltageLevels.map(v => (
+                    <option value="">请选择电压等级</option>
+                    {getCurrentVoltageLevels().map(v => (
                       <option key={v.id} value={v.id}>{v.name} - {v.description}</option>
                     ))}
                   </select>
+                  <div className="form-hint">
+                    {formData.deviceType && (voltageLevelsByDevice[formData.deviceType] ? 
+                      '已根据设备类型显示对应电压等级' : '使用通用交流电压等级')}
+                  </div>
                 </div>
               </div>
 
@@ -373,6 +476,78 @@ function DeviceModelWizard({ onNavigate }) {
                 />
               </div>
 
+              {/* 自定义字段 */}
+              <div className="param-card" style={{ marginTop: '20px' }}>
+                <div className="param-card-title">
+                  <span>✏️</span> 自定义字段
+                  <button 
+                    className="btn btn-sm btn-secondary" 
+                    style={{ marginLeft: 'auto' }}
+                    onClick={handleAddCustomField}
+                  >
+                    ➕ 添加字段
+                  </button>
+                </div>
+                <div className="form-hint" style={{ marginBottom: '12px' }}>
+                  添加自定义字段以记录设备特有的信息
+                </div>
+                {formData.customFields.length === 0 ? (
+                  <div style={{ 
+                    padding: '16px', 
+                    textAlign: 'center', 
+                    color: 'var(--gray-400)',
+                    border: '1px dashed var(--gray-300)',
+                    borderRadius: '8px'
+                  }}>
+                    暂无自定义字段，点击"添加字段"开始
+                  </div>
+                ) : (
+                  formData.customFields.map((field, index) => (
+                    <div key={field.id} style={{ 
+                      display: 'flex', 
+                      gap: '12px', 
+                      alignItems: 'center',
+                      marginBottom: '8px',
+                      padding: '8px',
+                      background: 'white',
+                      borderRadius: '6px',
+                      border: '1px solid var(--gray-200)'
+                    }}>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="字段名称"
+                        style={{ flex: 1 }}
+                        value={field.name}
+                        onChange={(e) => handleUpdateCustomField(index, 'name', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="字段值"
+                        style={{ flex: 1 }}
+                        value={field.value}
+                        onChange={(e) => handleUpdateCustomField(index, 'value', e.target.value)}
+                      />
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="单位(可选)"
+                        style={{ width: '80px' }}
+                        value={field.unit}
+                        onChange={(e) => handleUpdateCustomField(index, 'unit', e.target.value)}
+                      />
+                      <button 
+                        className="btn btn-sm btn-danger"
+                        onClick={() => handleDeleteCustomField(index)}
+                      >
+                        删除
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+
               <div style={{ fontSize: '12px', color: 'var(--gray-400)', marginTop: '20px' }}>
                 物模型ID将自动生成：EMS_M{Date.now().toString().slice(-6)}
               </div>
@@ -383,73 +558,122 @@ function DeviceModelWizard({ onNavigate }) {
           {currentStep === 2 && (
             <div>
               <h3 style={{ marginBottom: '20px' }}>步骤 2/5：设备属性配置</h3>
+              <div className="notice-banner info">
+                <span>💡</span>
+                <span>属性配置已根据设备类型自动加载，您可以根据实际情况修改</span>
+              </div>
               
-              {/* 基础属性 */}
+              {/* 设备特定基础属性 */}
               <div className="param-card">
                 <div className="param-card-title">
                   <span>📊</span> 基础属性
+                  <span style={{ fontSize: '12px', color: 'var(--gray-400)', marginLeft: 'auto', fontWeight: 'normal' }}>
+                    {formData.deviceType ? `${deviceCategories.find(c => c.devices.some(d => d.id === formData.deviceType))?.devices.find(d => d.id === formData.deviceType)?.name || '设备'}专属配置` : '通用配置'}
+                  </span>
                 </div>
                 <div className="param-grid">
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">
-                      额定电压
-                      <span className="tooltip-container">
-                        <span className="tooltip-trigger">?</span>
-                        <span className="tooltip-content">设备额定工作电压</span>
-                      </span>
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.ratedVoltage}
-                        onChange={(e) => updateFormData('ratedVoltage', Number(e.target.value))}
-                      />
-                      <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>V</span>
+                  {getCurrentBasicAttributes().map(attr => (
+                    <div key={attr.key} className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">
+                        {attr.name}
+                        {attr.unit && <span style={{ color: 'var(--gray-400)', fontSize: '12px' }}> ({attr.unit})</span>}
+                      </label>
+                      {attr.type === 'select' ? (
+                        <select
+                          className="form-select"
+                          value={formData.basicAttributes[attr.key] ?? attr.default}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            basicAttributes: { ...prev.basicAttributes, [attr.key]: e.target.value }
+                          }))}
+                        >
+                          {attr.options.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : attr.type === 'text' ? (
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={formData.basicAttributes[attr.key] ?? attr.default}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            basicAttributes: { ...prev.basicAttributes, [attr.key]: e.target.value }
+                          }))}
+                        />
+                      ) : (
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={formData.basicAttributes[attr.key] ?? attr.default}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            basicAttributes: { ...prev.basicAttributes, [attr.key]: Number(e.target.value) }
+                          }))}
+                        />
+                      )}
                     </div>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">
-                      额定电流
-                      <span className="tooltip-container">
-                        <span className="tooltip-trigger">?</span>
-                        <span className="tooltip-content">设备额定工作电流</span>
-                      </span>
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.ratedCurrent}
-                        onChange={(e) => updateFormData('ratedCurrent', Number(e.target.value))}
-                      />
-                      <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>A</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 高级属性 */}
+              <div className="param-card" style={{ marginTop: '20px', background: '#f8fafc' }}>
+                <div className="param-card-title">
+                  <span>⚙️</span> 高级属性
+                  <span style={{ fontSize: '12px', color: 'var(--gray-400)', marginLeft: 'auto', fontWeight: 'normal' }}>
+                    可选配置
+                  </span>
+                </div>
+                <div className="param-grid">
+                  {getCurrentAdvancedAttributes().map(attr => (
+                    <div key={attr.key} className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">
+                        {attr.name}
+                        {attr.unit && <span style={{ color: 'var(--gray-400)', fontSize: '12px' }}> ({attr.unit})</span>}
+                      </label>
+                      {attr.type === 'select' ? (
+                        <select
+                          className="form-select"
+                          value={formData.advancedAttributes[attr.key] ?? attr.default}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            advancedAttributes: { ...prev.advancedAttributes, [attr.key]: e.target.value }
+                          }))}
+                        >
+                          {attr.options.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : attr.type === 'text' ? (
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={formData.advancedAttributes[attr.key] ?? attr.default}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            advancedAttributes: { ...prev.advancedAttributes, [attr.key]: e.target.value }
+                          }))}
+                        />
+                      ) : (
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={formData.advancedAttributes[attr.key] ?? attr.default}
+                          onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            advancedAttributes: { ...prev.advancedAttributes, [attr.key]: Number(e.target.value) }
+                          }))}
+                        />
+                      )}
                     </div>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">
-                      额定功率
-                      <span className="tooltip-container">
-                        <span className="tooltip-trigger">?</span>
-                        <span className="tooltip-content">设备额定功率</span>
-                      </span>
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.ratedPower}
-                        onChange={(e) => updateFormData('ratedPower', Number(e.target.value))}
-                      />
-                      <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>kW</span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
 
               {/* 算法参数（仅对PCS/储能类设备显示） */}
               {(formData.deviceCategory === 'storage' || formData.deviceType === 'pcs') && (
-                <div className="algorithm-params">
+                <div className="algorithm-params" style={{ marginTop: '20px' }}>
                   <div className="param-card-title" style={{ color: 'white' }}>
                     <span>⚡</span> 电力调节算法参数
                   </div>
