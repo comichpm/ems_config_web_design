@@ -12,12 +12,17 @@ function DeviceModelList({ onNavigate }) {
   }, []);
 
   const loadModels = () => {
-    const savedModels = JSON.parse(localStorage.getItem('ems_device_models') || '[]');
-    setDeviceModels(savedModels);
+    try {
+      const savedModels = JSON.parse(localStorage.getItem('ems_device_models') || '[]');
+      setDeviceModels(Array.isArray(savedModels) ? savedModels : []);
+    } catch (e) {
+      console.error('Failed to load device models from localStorage:', e);
+      setDeviceModels([]);
+    }
   };
 
   const handleDeleteModel = (modelId) => {
-    if (confirm('确定要删除该物模型吗？此操作不可恢复。')) {
+    if (window.confirm('确定要删除该物模型吗？此操作不可恢复。')) {
       const updatedModels = deviceModels.filter(m => m.id !== modelId);
       localStorage.setItem('ems_device_models', JSON.stringify(updatedModels));
       setDeviceModels(updatedModels);

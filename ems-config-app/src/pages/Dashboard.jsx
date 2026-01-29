@@ -6,10 +6,16 @@ function Dashboard({ onNavigate }) {
 
   useEffect(() => {
     // 从localStorage加载数据
-    const savedProjects = JSON.parse(localStorage.getItem('ems_projects') || '[]');
-    const savedModels = JSON.parse(localStorage.getItem('ems_device_models') || '[]');
-    setProjects(savedProjects);
-    setDeviceModels(savedModels);
+    try {
+      const savedProjects = JSON.parse(localStorage.getItem('ems_projects') || '[]');
+      const savedModels = JSON.parse(localStorage.getItem('ems_device_models') || '[]');
+      setProjects(Array.isArray(savedProjects) ? savedProjects : []);
+      setDeviceModels(Array.isArray(savedModels) ? savedModels : []);
+    } catch (e) {
+      console.error('Failed to load data from localStorage:', e);
+      setProjects([]);
+      setDeviceModels([]);
+    }
   }, []);
 
   return (

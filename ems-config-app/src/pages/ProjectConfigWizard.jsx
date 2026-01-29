@@ -79,8 +79,13 @@ function ProjectConfigWizard({ onNavigate }) {
 
   // 加载已保存的物模型
   useEffect(() => {
-    const savedModels = JSON.parse(localStorage.getItem('ems_device_models') || '[]');
-    setDeviceModels(savedModels);
+    try {
+      const savedModels = JSON.parse(localStorage.getItem('ems_device_models') || '[]');
+      setDeviceModels(Array.isArray(savedModels) ? savedModels : []);
+    } catch (e) {
+      console.error('Failed to load device models from localStorage:', e);
+      setDeviceModels([]);
+    }
   }, []);
 
   const updateProjectInfo = (field, value) => {

@@ -1,0 +1,180 @@
+{
+  "projectInfo": {
+    "name": "XX工业园区储能项目",
+    "location": "广东省深圳市宝安区XX路XX号",
+    "manager": "张工",
+    "contact": "13800138000",
+    "description": "工业园区1MW/2MWh储能系统，用于削峰填谷和需量控制"
+  },
+  "devices": [
+    {
+      "instanceId": "pcs_001",
+      "instanceName": "储能PCS-1号机",
+      "id": "model_pcs_500kw",
+      "modelName": "储能PCS-500kW",
+      "deviceCategory": "storage",
+      "deviceType": "pcs",
+      "manufacturer": "阳光电源",
+      "modelNumber": "SC500KTL-HV",
+      "voltageLevel": "380v",
+      "ratedVoltage": 380,
+      "ratedCurrent": 760,
+      "ratedPower": 500,
+      "protocolType": "modbus_tcp",
+      "channelType": "ethernet",
+      "params": {
+        "ip": "192.168.1.100",
+        "portNum": 502,
+        "slaveAddress": 1
+      },
+      "algorithmParams": {
+        "adjustThreshold": 380,
+        "responseTime": 0.5,
+        "pidKp": 2.5,
+        "pidKi": 0.1,
+        "pidKd": 0.05,
+        "compensationFactor": 1.02
+      },
+      "communicationParams": {
+        "timeout": 3000,
+        "retries": 3,
+        "reconnectInterval": 5000,
+        "pollInterval": 1000
+      }
+    },
+    {
+      "instanceId": "bms_001",
+      "instanceName": "BMS管理系统-1号",
+      "id": "model_bms_1mwh",
+      "modelName": "BMS-1MWh",
+      "deviceCategory": "storage",
+      "deviceType": "bms",
+      "manufacturer": "宁德时代",
+      "modelNumber": "BMS-1000",
+      "voltageLevel": "380v",
+      "ratedVoltage": 768,
+      "protocolType": "can",
+      "channelType": "can",
+      "params": {
+        "channel": "CAN0",
+        "baudRate": 250000,
+        "canId": "0x001"
+      }
+    },
+    {
+      "instanceId": "meter_001",
+      "instanceName": "并网点电表",
+      "id": "model_meter",
+      "modelName": "智能电表-三相",
+      "deviceCategory": "other",
+      "deviceType": "meter",
+      "manufacturer": "正泰电器",
+      "modelNumber": "DTSD342",
+      "voltageLevel": "380v",
+      "protocolType": "dlt645_07",
+      "channelType": "serial",
+      "params": {
+        "port": "COM1",
+        "baudRate": 2400,
+        "slaveAddress": 1
+      }
+    }
+  ],
+  "topology": {
+    "nodes": [
+      { "id": "pcs_001", "position": { "x": 300, "y": 100 } },
+      { "id": "bms_001", "position": { "x": 300, "y": 250 } },
+      { "id": "meter_001", "position": { "x": 100, "y": 100 } }
+    ],
+    "edges": [
+      { "source": "meter_001", "target": "pcs_001" },
+      { "source": "pcs_001", "target": "bms_001" }
+    ]
+  },
+  "algorithmConfig": {
+    "peakShaving": {
+      "enabled": true,
+      "peakPeriods": [
+        { "name": "早高峰", "startTime": "08:00", "endTime": "11:00", "action": "discharge", "maxPower": 500 },
+        { "name": "午高峰", "startTime": "14:00", "endTime": "17:00", "action": "discharge", "maxPower": 500 },
+        { "name": "晚高峰", "startTime": "19:00", "endTime": "22:00", "action": "discharge", "maxPower": 500 }
+      ],
+      "valleyPeriods": [
+        { "name": "谷电时段", "startTime": "23:00", "endTime": "07:00", "action": "charge", "maxPower": 300 }
+      ]
+    },
+    "demandControl": {
+      "enabled": true,
+      "demandLimit": 1000,
+      "warningThreshold": 85,
+      "actionThreshold": 95,
+      "responseTime": 30,
+      "controlMode": "auto"
+    },
+    "socManagement": {
+      "minSoc": 10,
+      "maxSoc": 95,
+      "targetSoc": 50,
+      "emergencyReserve": 20
+    },
+    "powerControl": {
+      "rampRate": 100,
+      "maxChargePower": 500,
+      "maxDischargePower": 500,
+      "powerFactor": 0.95
+    }
+  },
+  "northboundConfig": {
+    "enabled": true,
+    "protocol": "mqtt",
+    "serverIp": "ems-cloud.example.com",
+    "serverPort": 1883,
+    "topic": "ems/industrial_park/data",
+    "username": "ems_client",
+    "password": "",
+    "publishInterval": 5000
+  },
+  "alarmRules": [
+    {
+      "name": "PCS过压告警",
+      "condition": "pcs_voltage > threshold",
+      "threshold": 420,
+      "unit": "V",
+      "level": "warning",
+      "notifications": ["popup", "sound"]
+    },
+    {
+      "name": "BMS SOC过低",
+      "condition": "soc < threshold",
+      "threshold": 10,
+      "unit": "%",
+      "level": "error",
+      "notifications": ["popup", "sound", "sms"]
+    },
+    {
+      "name": "通信中断告警",
+      "condition": "offline_time > threshold",
+      "threshold": 30,
+      "unit": "s",
+      "level": "critical",
+      "notifications": ["popup", "sound", "email", "sms"]
+    }
+  ],
+  "virtualPoints": [
+    {
+      "name": "系统总功率",
+      "formula": "SUM(pcs_power)",
+      "unit": "kW",
+      "description": "所有PCS功率之和"
+    },
+    {
+      "name": "系统SOC",
+      "formula": "AVG(bms_soc)",
+      "unit": "%",
+      "description": "所有BMS平均SOC"
+    }
+  ],
+  "version": "1.0",
+  "createdAt": "2026-01-29T12:00:00.000Z",
+  "exportedAt": "2026-01-29T12:00:00.000Z"
+}

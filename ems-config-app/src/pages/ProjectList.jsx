@@ -10,12 +10,17 @@ function ProjectList({ onNavigate }) {
   }, []);
 
   const loadProjects = () => {
-    const savedProjects = JSON.parse(localStorage.getItem('ems_projects') || '[]');
-    setProjects(savedProjects);
+    try {
+      const savedProjects = JSON.parse(localStorage.getItem('ems_projects') || '[]');
+      setProjects(Array.isArray(savedProjects) ? savedProjects : []);
+    } catch (e) {
+      console.error('Failed to load projects from localStorage:', e);
+      setProjects([]);
+    }
   };
 
   const handleDeleteProject = (projectId) => {
-    if (confirm('确定要删除该项目吗？此操作不可恢复。')) {
+    if (window.confirm('确定要删除该项目吗？此操作不可恢复。')) {
       const updatedProjects = projects.filter(p => p.id !== projectId);
       localStorage.setItem('ems_projects', JSON.stringify(updatedProjects));
       setProjects(updatedProjects);
