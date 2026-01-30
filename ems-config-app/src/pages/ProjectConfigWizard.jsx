@@ -2617,6 +2617,154 @@ function ProjectConfigWizard({ onNavigate }) {
                     </div>
                   )}
 
+                  {/* 快捷配置模板 */}
+                  <div style={{ marginBottom: '24px', padding: '16px', background: 'linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%)', borderRadius: '12px', border: '2px solid #818cf8' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '20px' }}>⚡</span>
+                      <div style={{ fontWeight: '600', color: '#4338ca' }}>快捷配置模板</div>
+                      <div style={{ fontSize: '12px', color: '#6366f1' }}>一键应用常用峰谷时段配置</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+                      <button
+                        className="btn"
+                        style={{ padding: '12px', background: 'white', border: '2px solid #a5b4fc', borderRadius: '8px', cursor: 'pointer' }}
+                        onClick={() => {
+                          setAlgorithmConfig(prev => ({
+                            ...prev,
+                            peakShaving: {
+                              enabled: true,
+                              peakPeriods: [
+                                { id: 1, name: '上午高峰', startTime: '09:00', endTime: '11:30', action: 'discharge', maxPower: 200 },
+                                { id: 2, name: '下午高峰', startTime: '14:00', endTime: '17:00', action: 'discharge', maxPower: 200 },
+                                { id: 3, name: '晚间高峰', startTime: '19:00', endTime: '21:00', action: 'discharge', maxPower: 200 }
+                              ],
+                              valleyPeriods: [
+                                { id: 1, name: '夜间低谷', startTime: '23:00', endTime: '07:00', action: 'charge', maxPower: 200 }
+                              ]
+                            },
+                            pricing: { ...prev.pricing, peakPrice: 1.2, valleyPrice: 0.35, flatPrice: 0.7 }
+                          }));
+                          alert('✅ 已应用"工商业峰谷"模板！\n\n峰时段: 09:00-11:30, 14:00-17:00, 19:00-21:00\n谷时段: 23:00-07:00\n峰时电价: ¥1.2/kWh\n谷时电价: ¥0.35/kWh');
+                        }}
+                      >
+                        <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏭</div>
+                        <div style={{ fontWeight: '600', fontSize: '13px' }}>工商业峰谷</div>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>三峰一谷模式</div>
+                      </button>
+                      <button
+                        className="btn"
+                        style={{ padding: '12px', background: 'white', border: '2px solid #a5b4fc', borderRadius: '8px', cursor: 'pointer' }}
+                        onClick={() => {
+                          setAlgorithmConfig(prev => ({
+                            ...prev,
+                            peakShaving: {
+                              enabled: true,
+                              peakPeriods: [
+                                { id: 1, name: '早高峰', startTime: '08:00', endTime: '11:00', action: 'discharge', maxPower: 150 },
+                                { id: 2, name: '晚高峰', startTime: '17:00', endTime: '21:00', action: 'discharge', maxPower: 150 }
+                              ],
+                              valleyPeriods: [
+                                { id: 1, name: '夜间低谷', startTime: '22:00', endTime: '06:00', action: 'charge', maxPower: 150 }
+                              ]
+                            },
+                            pricing: { ...prev.pricing, peakPrice: 0.85, valleyPrice: 0.35, flatPrice: 0.55 }
+                          }));
+                          alert('✅ 已应用"居民用电"模板！\n\n峰时段: 08:00-11:00, 17:00-21:00\n谷时段: 22:00-06:00\n峰时电价: ¥0.85/kWh\n谷时电价: ¥0.35/kWh');
+                        }}
+                      >
+                        <div style={{ fontSize: '20px', marginBottom: '4px' }}>🏠</div>
+                        <div style={{ fontWeight: '600', fontSize: '13px' }}>居民用电</div>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>两峰一谷模式</div>
+                      </button>
+                      <button
+                        className="btn"
+                        style={{ padding: '12px', background: 'white', border: '2px solid #a5b4fc', borderRadius: '8px', cursor: 'pointer' }}
+                        onClick={() => {
+                          setAlgorithmConfig(prev => ({
+                            ...prev,
+                            peakShaving: {
+                              enabled: true,
+                              peakPeriods: [
+                                { id: 1, name: '尖峰时段', startTime: '10:00', endTime: '12:00', action: 'discharge', maxPower: 300 },
+                                { id: 2, name: '高峰时段1', startTime: '08:00', endTime: '10:00', action: 'discharge', maxPower: 250 },
+                                { id: 3, name: '高峰时段2', startTime: '14:00', endTime: '17:00', action: 'discharge', maxPower: 250 },
+                                { id: 4, name: '晚间高峰', startTime: '19:00', endTime: '22:00', action: 'discharge', maxPower: 200 }
+                              ],
+                              valleyPeriods: [
+                                { id: 1, name: '深夜低谷', startTime: '00:00', endTime: '06:00', action: 'charge', maxPower: 250 },
+                                { id: 2, name: '午间低谷', startTime: '12:00', endTime: '14:00', action: 'charge', maxPower: 150 }
+                              ]
+                            },
+                            pricing: { ...prev.pricing, peakPrice: 1.5, valleyPrice: 0.25, flatPrice: 0.8 }
+                          }));
+                          alert('✅ 已应用"尖峰平谷"模板！\n\n尖峰: 10:00-12:00\n高峰: 08:00-10:00, 14:00-17:00, 19:00-22:00\n谷时: 00:00-06:00, 12:00-14:00\n尖峰电价: ¥1.5/kWh\n谷时电价: ¥0.25/kWh');
+                        }}
+                      >
+                        <div style={{ fontSize: '20px', marginBottom: '4px' }}>⚡</div>
+                        <div style={{ fontWeight: '600', fontSize: '13px' }}>尖峰平谷</div>
+                        <div style={{ fontSize: '11px', color: '#6b7280' }}>四档电价模式</div>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* 24小时时段可视化 */}
+                  {algorithmConfig.peakShaving.enabled && (
+                    <div style={{ marginBottom: '24px', padding: '16px', background: '#f0fdf4', borderRadius: '12px', border: '1px solid #86efac' }}>
+                      <div style={{ fontWeight: '600', marginBottom: '12px', color: '#166534' }}>📊 24小时时段分布预览</div>
+                      <div style={{ display: 'flex', height: '40px', borderRadius: '8px', overflow: 'hidden', background: '#e5e7eb' }}>
+                        {Array.from({ length: 24 }, (_, hour) => {
+                          // 检查当前小时是否在峰时段
+                          const isPeak = algorithmConfig.peakShaving.peakPeriods.some(p => {
+                            const start = parseInt(p.startTime.split(':')[0]);
+                            const end = parseInt(p.endTime.split(':')[0]);
+                            if (start < end) return hour >= start && hour < end;
+                            return hour >= start || hour < end; // 跨午夜
+                          });
+                          // 检查当前小时是否在谷时段
+                          const isValley = algorithmConfig.peakShaving.valleyPeriods.some(p => {
+                            const start = parseInt(p.startTime.split(':')[0]);
+                            const end = parseInt(p.endTime.split(':')[0]);
+                            if (start < end) return hour >= start && hour < end;
+                            return hour >= start || hour < end; // 跨午夜
+                          });
+                          return (
+                            <div
+                              key={hour}
+                              style={{
+                                flex: 1,
+                                background: isPeak ? '#fbbf24' : isValley ? '#3b82f6' : '#9ca3af',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '10px',
+                                color: 'white',
+                                fontWeight: '600',
+                                borderRight: '1px solid rgba(255,255,255,0.3)'
+                              }}
+                              title={`${hour}:00 - ${isPeak ? '峰时段(放电)' : isValley ? '谷时段(充电)' : '平时段'}`}
+                            >
+                              {hour}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '24px', marginTop: '8px', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#fbbf24' }}></div>
+                          <span>峰时段(放电)</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#3b82f6' }}></div>
+                          <span>谷时段(充电)</span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          <div style={{ width: '12px', height: '12px', borderRadius: '2px', background: '#9ca3af' }}></div>
+                          <span>平时段</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* 削峰填谷配置 */}
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
@@ -2849,10 +2997,11 @@ function ProjectConfigWizard({ onNavigate }) {
                     </div>
                     
                     {algorithmConfig.demandControl.enabled && (
-                      <div className="form-row form-row-3">
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label">需量限制</label>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <>
+                        {/* 需量基本参数 */}
+                        <div className="form-row form-row-4" style={{ marginBottom: '16px' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">需量限制 (kW)</label>
                             <input
                               type="number"
                               className="form-input"
@@ -2862,12 +3011,9 @@ function ProjectConfigWizard({ onNavigate }) {
                                 demandControl: { ...prev.demandControl, demandLimit: Number(e.target.value) }
                               }))}
                             />
-                            <span style={{ color: 'var(--gray-500)' }}>kW</span>
                           </div>
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label">预警阈值</label>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">预警阈值 (%)</label>
                             <input
                               type="number"
                               className="form-input"
@@ -2877,12 +3023,9 @@ function ProjectConfigWizard({ onNavigate }) {
                                 demandControl: { ...prev.demandControl, warningThreshold: Number(e.target.value) }
                               }))}
                             />
-                            <span style={{ color: 'var(--gray-500)' }}>%</span>
                           </div>
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label">动作阈值</label>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">动作阈值 (%)</label>
                             <input
                               type="number"
                               className="form-input"
@@ -2892,10 +3035,88 @@ function ProjectConfigWizard({ onNavigate }) {
                                 demandControl: { ...prev.demandControl, actionThreshold: Number(e.target.value) }
                               }))}
                             />
-                            <span style={{ color: 'var(--gray-500)' }}>%</span>
+                          </div>
+                          <div className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">需量周期</label>
+                            <select
+                              className="form-select"
+                              value={algorithmConfig.demandControl.demandPeriod || 15}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev,
+                                demandControl: { ...prev.demandControl, demandPeriod: Number(e.target.value) }
+                              }))}
+                            >
+                              <option value={15}>15分钟</option>
+                              <option value={30}>30分钟</option>
+                              <option value={60}>60分钟</option>
+                            </select>
                           </div>
                         </div>
-                      </div>
+                        
+                        {/* 需量控制策略 */}
+                        <div style={{ padding: '16px', background: 'white', borderRadius: '8px', border: '1px solid var(--gray-200)' }}>
+                          <div style={{ fontWeight: '600', marginBottom: '12px', color: '#374151' }}>控制策略</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
+                            {[
+                              { id: 'proportional', name: '比例控制', desc: '根据需量超限比例调节功率' },
+                              { id: 'stepwise', name: '阶梯控制', desc: '分阶段逐步调节功率' },
+                              { id: 'predictive', name: '预测控制', desc: '预测未来需量提前响应' }
+                            ].map(strategy => (
+                              <label
+                                key={strategy.id}
+                                style={{
+                                  padding: '12px',
+                                  background: (algorithmConfig.demandControl.strategy || 'proportional') === strategy.id ? '#dbeafe' : '#f9fafb',
+                                  border: `2px solid ${(algorithmConfig.demandControl.strategy || 'proportional') === strategy.id ? '#3b82f6' : '#e5e7eb'}`,
+                                  borderRadius: '8px',
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <input
+                                    type="radio"
+                                    checked={(algorithmConfig.demandControl.strategy || 'proportional') === strategy.id}
+                                    onChange={() => setAlgorithmConfig(prev => ({
+                                      ...prev,
+                                      demandControl: { ...prev.demandControl, strategy: strategy.id }
+                                    }))}
+                                  />
+                                  <span style={{ fontWeight: '600', fontSize: '13px' }}>{strategy.name}</span>
+                                </div>
+                                <div style={{ fontSize: '11px', color: '#6b7280', marginTop: '4px', marginLeft: '20px' }}>{strategy.desc}</div>
+                              </label>
+                            ))}
+                          </div>
+                          
+                          {/* 响应优先级 */}
+                          <div style={{ marginTop: '12px' }}>
+                            <div style={{ fontWeight: '600', marginBottom: '8px', color: '#374151', fontSize: '13px' }}>响应优先级</div>
+                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                              {[
+                                { id: 'battery_discharge', name: '储能放电', icon: '🔋' },
+                                { id: 'limit_charge', name: '限制充电', icon: '🚫' },
+                                { id: 'load_shedding', name: '负载切除', icon: '⚡' }
+                              ].map((action, index) => (
+                                <div
+                                  key={action.id}
+                                  style={{
+                                    padding: '8px 12px',
+                                    background: '#f3f4f6',
+                                    borderRadius: '6px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '6px'
+                                  }}
+                                >
+                                  <span style={{ fontWeight: '600', color: '#3b82f6' }}>#{index + 1}</span>
+                                  <span>{action.icon}</span>
+                                  <span style={{ fontSize: '12px' }}>{action.name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </>
                     )}
                   </div>
 
