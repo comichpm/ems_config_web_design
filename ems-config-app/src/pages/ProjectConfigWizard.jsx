@@ -212,10 +212,10 @@ function ProjectConfigWizard({ onNavigate }) {
       predictionHorizon: 24, // 小时
       safetyMargin: 5, // %
       smoothingFactor: 0.8,
-      antiReversePower: true,
-      antiReversePowerThreshold: 10, // kW
       gridPeakShaving: true,
-      loadFollowing: true
+      loadFollowing: true,
+      autoSchedule: true,
+      emergencyReserve: false
     },
     // 削峰填谷配置
     peakShaving: algorithmDefaults?.peakShaving || {
@@ -271,7 +271,10 @@ function ProjectConfigWizard({ onNavigate }) {
     // 充电桩接入策略
     chargerIntegration: {
       enabled: false,
+      chargingMode: 'free', // free: 自由充电, scheduled: 有序充电, v2g: V2G模式
       maxTotalPower: 300, // kW
+      v2gMinSoc: 30, // V2G最低SOC
+      v2gMaxPower: 50, // V2G放电功率
       loadBalancing: true,
       schedulingEnabled: true,
       peakShiftEnabled: true
@@ -2873,6 +2876,42 @@ function ProjectConfigWizard({ onNavigate }) {
                       </div>
                       {algorithmConfig.chargerIntegration.enabled && (
                         <div style={{ fontSize: '13px' }}>
+                          {/* 充电模式 */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <label className="form-label" style={{ fontSize: '13px', marginBottom: '8px' }}>充电模式</label>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              {[
+                                { id: 'free', name: '自由充电' },
+                                { id: 'scheduled', name: '有序充电' },
+                                { id: 'v2g', name: 'V2G模式' }
+                              ].map(mode => (
+                                <button
+                                  key={mode.id}
+                                  type="button"
+                                  onClick={() => setAlgorithmConfig(prev => ({
+                                    ...prev, chargerIntegration: { ...prev.chargerIntegration, chargingMode: mode.id }
+                                  }))}
+                                  style={{
+                                    flex: 1,
+                                    padding: '8px 12px',
+                                    border: algorithmConfig.chargerIntegration.chargingMode === mode.id 
+                                      ? '2px solid #6d28d9' 
+                                      : '1px solid #c4b5fd',
+                                    borderRadius: '6px',
+                                    background: algorithmConfig.chargerIntegration.chargingMode === mode.id 
+                                      ? '#ddd6fe' 
+                                      : 'white',
+                                    cursor: 'pointer',
+                                    fontWeight: algorithmConfig.chargerIntegration.chargingMode === mode.id ? '600' : '400',
+                                    fontSize: '12px'
+                                  }}
+                                >
+                                  {mode.name}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          {/* 功率限制 */}
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                             <span>总功率限制 (kW)</span>
                             <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
@@ -2881,6 +2920,28 @@ function ProjectConfigWizard({ onNavigate }) {
                                 ...prev, chargerIntegration: { ...prev.chargerIntegration, maxTotalPower: Number(e.target.value) }
                               }))} />
                           </div>
+                          {/* V2G相关参数 */}
+                          {algorithmConfig.chargerIntegration.chargingMode === 'v2g' && (
+                            <>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                <span>放电SOC下限 (%)</span>
+                                <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
+                                  value={algorithmConfig.chargerIntegration.v2gMinSoc || 30}
+                                  onChange={(e) => setAlgorithmConfig(prev => ({
+                                    ...prev, chargerIntegration: { ...prev.chargerIntegration, v2gMinSoc: Number(e.target.value) }
+                                  }))} />
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                <span>放电功率限制 (kW)</span>
+                                <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
+                                  value={algorithmConfig.chargerIntegration.v2gMaxPower || 50}
+                                  onChange={(e) => setAlgorithmConfig(prev => ({
+                                    ...prev, chargerIntegration: { ...prev.chargerIntegration, v2gMaxPower: Number(e.target.value) }
+                                  }))} />
+                              </div>
+                            </>
+                          )}
+                          {/* 策略开关 */}
                           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px' }}>
                             <input type="checkbox" checked={algorithmConfig.chargerIntegration.loadBalancing}
                               onChange={(e) => setAlgorithmConfig(prev => ({
@@ -3154,7 +3215,7 @@ function ProjectConfigWizard({ onNavigate }) {
                     </div>
                   </div>
 
-                  {/* 策略开关 */}
+                  {/* 策略开关 - 移除逆功率保护(已在设备接入Tab中配置) */}
                   <div style={{ 
                     display: 'grid', 
                     gridTemplateColumns: 'repeat(2, 1fr)', 
@@ -3162,9 +3223,10 @@ function ProjectConfigWizard({ onNavigate }) {
                     marginTop: '20px'
                   }}>
                     {[
-                      { key: 'antiReversePower', name: '逆功率保护', desc: '防止电力倒送电网' },
                       { key: 'gridPeakShaving', name: '电网削峰', desc: '高峰期储能放电' },
-                      { key: 'loadFollowing', name: '负载跟踪', desc: '跟踪负载变化调节' }
+                      { key: 'loadFollowing', name: '负载跟踪', desc: '跟踪负载变化调节' },
+                      { key: 'autoSchedule', name: '自动调度', desc: '系统自动优化调度' },
+                      { key: 'emergencyReserve', name: '应急备用', desc: '保留应急电量储备' }
                     ].map(item => (
                       <div 
                         key={item.key}
@@ -3218,27 +3280,6 @@ function ProjectConfigWizard({ onNavigate }) {
                       </div>
                     ))}
                   </div>
-
-                  {/* 逆功率保护阈值 */}
-                  {algorithmConfig.advanced.antiReversePower && (
-                    <div style={{ marginTop: '16px' }}>
-                      <div className="form-group" style={{ maxWidth: '300px' }}>
-                        <label className="form-label">逆功率保护阈值</label>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={algorithmConfig.advanced.antiReversePowerThreshold}
-                            onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev,
-                              advanced: { ...prev.advanced, antiReversePowerThreshold: Number(e.target.value) }
-                            }))}
-                          />
-                          <span style={{ color: 'var(--gray-500)' }}>kW</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
