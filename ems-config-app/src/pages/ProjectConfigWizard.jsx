@@ -4064,11 +4064,67 @@ function ProjectConfigWizard({ onNavigate }) {
                     </div>
                   </div>
 
-                  {/* 点表配置 */}
+                  {/* 点表配置 - 协议专用点位类型 */}
                   <div style={{ padding: '20px', background: 'var(--gray-50)', borderRadius: '12px', border: '1px solid var(--gray-200)' }}>
+                    {/* 协议点位类型说明 */}
+                    <div style={{ marginBottom: '16px', padding: '12px', background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
+                      <div style={{ fontWeight: '600', marginBottom: '8px', color: '#1e40af' }}>
+                        📋 {northboundConfig.protocol === 'iec104' ? 'IEC104协议点位类型' : 
+                            northboundConfig.protocol === 'mqtt' ? 'MQTT协议点位类型' :
+                            northboundConfig.protocol === 'http' ? 'HTTP协议点位类型' : 'Modbus协议点位类型'}
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', fontSize: '12px' }}>
+                        {northboundConfig.protocol === 'iec104' && (
+                          <>
+                            <span style={{ padding: '2px 8px', background: '#dbeafe', borderRadius: '4px' }}>M_ME_NA 归一化遥测</span>
+                            <span style={{ padding: '2px 8px', background: '#dbeafe', borderRadius: '4px' }}>M_ME_NB 标度化遥测</span>
+                            <span style={{ padding: '2px 8px', background: '#dbeafe', borderRadius: '4px' }}>M_ME_NC 浮点型遥测</span>
+                            <span style={{ padding: '2px 8px', background: '#dcfce7', borderRadius: '4px' }}>M_SP_NA 单点遥信</span>
+                            <span style={{ padding: '2px 8px', background: '#dcfce7', borderRadius: '4px' }}>M_DP_NA 双点遥信</span>
+                            <span style={{ padding: '2px 8px', background: '#fef3c7', borderRadius: '4px' }}>M_IT_NA 累计量</span>
+                            <span style={{ padding: '2px 8px', background: '#fce7f3', borderRadius: '4px' }}>C_SC_NA 单点遥控</span>
+                            <span style={{ padding: '2px 8px', background: '#fce7f3', borderRadius: '4px' }}>C_DC_NA 双点遥控</span>
+                            <span style={{ padding: '2px 8px', background: '#fce7f3', borderRadius: '4px' }}>C_RC_NA 步位置调节</span>
+                            <span style={{ padding: '2px 8px', background: '#e0e7ff', borderRadius: '4px' }}>C_SE_NA 归一化设值</span>
+                            <span style={{ padding: '2px 8px', background: '#e0e7ff', borderRadius: '4px' }}>C_SE_NB 标度化设值</span>
+                            <span style={{ padding: '2px 8px', background: '#e0e7ff', borderRadius: '4px' }}>C_SE_NC 浮点型设值</span>
+                          </>
+                        )}
+                        {northboundConfig.protocol === 'mqtt' && (
+                          <>
+                            <span style={{ padding: '2px 8px', background: '#dbeafe', borderRadius: '4px' }}>遥测点 Telemetry</span>
+                            <span style={{ padding: '2px 8px', background: '#dcfce7', borderRadius: '4px' }}>遥信点 Status</span>
+                            <span style={{ padding: '2px 8px', background: '#fce7f3', borderRadius: '4px' }}>遥控点 Control</span>
+                            <span style={{ padding: '2px 8px', background: '#e0e7ff', borderRadius: '4px' }}>设置点 Setting</span>
+                          </>
+                        )}
+                        {northboundConfig.protocol === 'http' && (
+                          <>
+                            <span style={{ padding: '2px 8px', background: '#dbeafe', borderRadius: '4px' }}>GET端点 读取数据</span>
+                            <span style={{ padding: '2px 8px', background: '#dcfce7', borderRadius: '4px' }}>POST端点 写入数据</span>
+                            <span style={{ padding: '2px 8px', background: '#fce7f3', borderRadius: '4px' }}>推送端点 主动上报</span>
+                          </>
+                        )}
+                        {northboundConfig.protocol === 'modbus_tcp' && (
+                          <>
+                            <span style={{ padding: '2px 8px', background: '#dbeafe', borderRadius: '4px' }}>线圈 Coil (01/05)</span>
+                            <span style={{ padding: '2px 8px', background: '#dcfce7', borderRadius: '4px' }}>离散输入 DI (02)</span>
+                            <span style={{ padding: '2px 8px', background: '#fce7f3', borderRadius: '4px' }}>保持寄存器 HR (03/06)</span>
+                            <span style={{ padding: '2px 8px', background: '#e0e7ff', borderRadius: '4px' }}>输入寄存器 IR (04)</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* 南向物模型点表关联提示 */}
+                    <div style={{ marginBottom: '16px', padding: '10px', background: '#fef3c7', borderRadius: '8px', border: '1px solid #fcd34d', fontSize: '13px' }}>
+                      <span style={{ marginRight: '8px' }}>💡</span>
+                      <strong>点位来源:</strong> 源点位应来自本项目已配置的物模型点表或虚拟点。选择设备后可快速添加其点位。
+                    </div>
+                    
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                       <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span>📋</span> 点表配置
+                        <span>📋</span> 点表映射配置
                       </h4>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <input
