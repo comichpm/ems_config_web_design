@@ -62,10 +62,118 @@ const presetTemplates = [
 function TemplateManager({ onNavigate }) {
   const [templates, setTemplates] = useState(presetTemplates);
   const [customTemplates, setCustomTemplates] = useState(() => {
-    return JSON.parse(localStorage.getItem('ems_custom_templates') || '[]');
+    try {
+      return JSON.parse(localStorage.getItem('ems_custom_templates') || '[]');
+    } catch (e) {
+      console.error('Failed to load custom templates:', e);
+      return [];
+    }
   });
   const [activeTab, setActiveTab] = useState('preset');
   const fileInputRef = useRef(null);
+  
+  // 新增/编辑模板的状态
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState(null);
+  const [templateForm, setTemplateForm] = useState({
+    name: '',
+    description: '',
+    category: '自定义',
+    devices: []
+  });
+
+  // 可用设备类型列表
+  const availableDevices = deviceCategories.flatMap(cat => 
+    cat.devices.map(d => ({
+      ...d,
+      category: cat.id,
+      categoryName: cat.name,
+      categoryIcon: cat.icon
+    }))
+  );
+
+  // 打开创建模板弹窗
+  const handleOpenCreateModal = () => {
+    setEditingTemplate(null);
+    setTemplateForm({
+      name: '',
+      description: '',
+      category: '自定义',
+      devices: []
+    });
+    setShowTemplateModal(true);
+  };
+
+  // 打开编辑模板弹窗
+  const handleOpenEditModal = (template) => {
+    setEditingTemplate(template);
+    setTemplateForm({
+      name: template.name,
+      description: template.description,
+      category: template.category,
+      devices: template.devices || []
+    });
+    setShowTemplateModal(true);
+  };
+
+  // 保存模板
+  const handleSaveTemplate = () => {
+    if (!templateForm.name) {
+      alert('请输入模板名称');
+      return;
+    }
+    
+    if (editingTemplate) {
+      // 编辑已有模板
+      const updatedTemplate = {
+        ...editingTemplate,
+        ...templateForm,
+        updatedAt: new Date().toISOString()
+      };
+      const updatedTemplates = customTemplates.map(t => 
+        t.id === editingTemplate.id ? updatedTemplate : t
+      );
+      localStorage.setItem('ems_custom_templates', JSON.stringify(updatedTemplates));
+      setCustomTemplates(updatedTemplates);
+      alert('模板更新成功！');
+    } else {
+      // 创建新模板
+      const newTemplate = {
+        id: `custom_template_${Date.now()}`,
+        ...templateForm,
+        algorithmConfig: algorithmDefaults,
+        createdAt: new Date().toISOString()
+      };
+      const updatedTemplates = [...customTemplates, newTemplate];
+      localStorage.setItem('ems_custom_templates', JSON.stringify(updatedTemplates));
+      setCustomTemplates(updatedTemplates);
+      setActiveTab('custom');
+      alert('模板创建成功！');
+    }
+    
+    setShowTemplateModal(false);
+  };
+
+  // 添加设备到模板
+  const handleAddDeviceToTemplate = (device) => {
+    setTemplateForm(prev => ({
+      ...prev,
+      devices: [...prev.devices, {
+        deviceCategory: device.category,
+        deviceType: device.id,
+        modelName: device.name,
+        manufacturer: '默认厂商'
+      }]
+    }));
+  };
+
+  // 从模板移除设备
+  const handleRemoveDeviceFromTemplate = (index) => {
+    setTemplateForm(prev => ({
+      ...prev,
+      devices: prev.devices.filter((_, i) => i !== index)
+    }));
+  };
 
   const handleUseTemplate = (template) => {
     // 将模板设备保存为物模型
@@ -141,7 +249,7 @@ function TemplateManager({ onNavigate }) {
   };
 
   const handleDeleteCustomTemplate = (templateId) => {
-    if (confirm('确定要删除该模板吗？')) {
+    if (window.confirm('确定要删除该模板吗？')) {
       const updatedTemplates = customTemplates.filter(t => t.id !== templateId);
       localStorage.setItem('ems_custom_templates', JSON.stringify(updatedTemplates));
       setCustomTemplates(updatedTemplates);
@@ -176,9 +284,14 @@ function TemplateManager({ onNavigate }) {
             📁 自定义模板 ({customTemplates.length})
           </div>
         </div>
-        <button className="btn btn-secondary" onClick={handleImportTemplate}>
-          📤 导入模板
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button className="btn btn-primary" onClick={handleOpenCreateModal}>
+            ➕ 创建模板
+          </button>
+          <button className="btn btn-secondary" onClick={handleImportTemplate}>
+            📤 导入模板
+          </button>
+        </div>
       </div>
 
       {/* 模板列表 */}
@@ -187,12 +300,17 @@ function TemplateManager({ onNavigate }) {
           <div className="empty-state-icon">📋</div>
           <div className="empty-state-title">暂无{activeTab === 'preset' ? '预设' : '自定义'}模板</div>
           <div className="empty-state-desc">
-            {activeTab === 'custom' && '导入或从项目保存模板'}
+            {activeTab === 'custom' && '创建新模板或导入已有模板'}
           </div>
           {activeTab === 'custom' && (
-            <button className="btn btn-primary" onClick={handleImportTemplate}>
-              📤 导入模板
-            </button>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+              <button className="btn btn-primary" onClick={handleOpenCreateModal}>
+                ➕ 创建模板
+              </button>
+              <button className="btn btn-secondary" onClick={handleImportTemplate}>
+                📤 导入模板
+              </button>
+            </div>
           )}
         </div>
       ) : (
@@ -204,7 +322,8 @@ function TemplateManager({ onNavigate }) {
                 background: template.category === '储能系统' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
                            template.category === '光储系统' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
                            template.category === '充电系统' ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' :
-                           'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)',
+                           template.category === '微电网' ? 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)' :
+                           'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
                 color: 'white'
               }}>
                 <h3 style={{ fontSize: '16px', marginBottom: '4px' }}>{template.name}</h3>
@@ -246,6 +365,14 @@ function TemplateManager({ onNavigate }) {
                   🚀 使用此模板
                 </button>
                 <div style={{ display: 'flex', gap: '8px' }}>
+                  {activeTab === 'custom' && (
+                    <button 
+                      className="btn btn-sm btn-secondary"
+                      onClick={() => handleOpenEditModal(template)}
+                    >
+                      ✏️ 编辑
+                    </button>
+                  )}
                   <button 
                     className="btn btn-sm btn-secondary"
                     onClick={() => handleExportTemplate(template)}
@@ -267,13 +394,171 @@ function TemplateManager({ onNavigate }) {
         </div>
       )}
 
+      {/* 创建/编辑模板弹窗 */}
+      {showTemplateModal && (
+        <div 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}
+          onClick={() => setShowTemplateModal(false)}
+        >
+          <div 
+            style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              width: '700px',
+              maxWidth: '90vw',
+              maxHeight: '80vh',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ marginBottom: '20px' }}>
+              {editingTemplate ? '编辑模板' : '创建新模板'}
+            </h3>
+            
+            <div className="form-group">
+              <label className="form-label">模板名称 <span className="required">*</span></label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="如：工厂储能系统模板"
+                value={templateForm.name}
+                onChange={(e) => setTemplateForm(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">模板描述</label>
+              <textarea
+                className="form-textarea"
+                placeholder="描述此模板的适用场景和包含的设备"
+                value={templateForm.description}
+                onChange={(e) => setTemplateForm(prev => ({ ...prev, description: e.target.value }))}
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">模板分类</label>
+              <select
+                className="form-select"
+                value={templateForm.category}
+                onChange={(e) => setTemplateForm(prev => ({ ...prev, category: e.target.value }))}
+              >
+                <option value="储能系统">储能系统</option>
+                <option value="光储系统">光储系统</option>
+                <option value="充电系统">充电系统</option>
+                <option value="微电网">微电网</option>
+                <option value="自定义">自定义</option>
+              </select>
+            </div>
+
+            {/* 设备配置 */}
+            <div className="form-group">
+              <label className="form-label">包含设备</label>
+              
+              {/* 已添加的设备 */}
+              {templateForm.devices.length > 0 && (
+                <div style={{ marginBottom: '12px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                  {templateForm.devices.map((device, index) => {
+                    const category = deviceCategories.find(c => c.id === device.deviceCategory);
+                    const deviceType = category?.devices.find(d => d.id === device.deviceType);
+                    return (
+                      <div 
+                        key={index}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '8px',
+                          padding: '8px 12px',
+                          background: 'var(--gray-100)',
+                          borderRadius: '6px',
+                          fontSize: '13px'
+                        }}
+                      >
+                        <span>{deviceType?.icon || '📦'}</span>
+                        <span>{device.modelName}</span>
+                        <button
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#dc2626',
+                            cursor: 'pointer',
+                            padding: '0 4px'
+                          }}
+                          onClick={() => handleRemoveDeviceFromTemplate(index)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 可选设备列表 */}
+              <div style={{ 
+                border: '1px solid var(--gray-200)', 
+                borderRadius: '8px', 
+                padding: '12px',
+                maxHeight: '200px',
+                overflowY: 'auto'
+              }}>
+                <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginBottom: '8px' }}>
+                  点击添加设备到模板：
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {availableDevices.map((device, index) => (
+                    <button
+                      key={index}
+                      className="btn btn-sm btn-secondary"
+                      style={{ fontSize: '11px' }}
+                      onClick={() => handleAddDeviceToTemplate(device)}
+                    >
+                      {device.icon} {device.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => setShowTemplateModal(false)}
+              >
+                取消
+              </button>
+              <button 
+                className="btn btn-primary"
+                onClick={handleSaveTemplate}
+                disabled={!templateForm.name}
+              >
+                {editingTemplate ? '保存修改' : '创建模板'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 说明卡片 */}
       <div className="card" style={{ marginTop: '24px', background: 'var(--gray-50)' }}>
         <div className="card-body">
           <h4 style={{ marginBottom: '12px' }}>💡 关于配置模板</h4>
           <ul style={{ fontSize: '13px', color: 'var(--gray-600)', paddingLeft: '20px', lineHeight: '1.8' }}>
             <li><strong>预设模板</strong>：系统内置的典型场景配置，可直接使用</li>
-            <li><strong>自定义模板</strong>：从已完成的项目导出，或导入其他项目的配置</li>
+            <li><strong>自定义模板</strong>：可创建、编辑、删除，满足个性化需求</li>
+            <li><strong>场景模板</strong>：项目配置中的场景模板是预设模板的快捷入口</li>
             <li>使用模板会将设备配置添加到物模型库，然后进入现场配置流程</li>
             <li>模板可以导出为JSON文件，方便在不同系统间迁移和复用</li>
           </ul>

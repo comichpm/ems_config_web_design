@@ -12,17 +12,19 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import {
   deviceCategories,
-  algorithmDefaults
+  algorithmDefaults,
+  northboundProtocols
 } from '../data/deviceTypes';
 
-// 新的6步引导流程
+// 7步引导流程 - 恢复北向配置
 const STEPS = [
   { id: 1, name: '项目信息' },
   { id: 2, name: '场景模板' },
   { id: 3, name: '设备实例' },
   { id: 4, name: '电气拓扑' },
   { id: 5, name: '算法策略' },
-  { id: 6, name: '告警规则' }
+  { id: 6, name: '告警规则' },
+  { id: 7, name: '北向配置' }
 ];
 
 // 场景模板定义
@@ -164,8 +166,8 @@ function ProjectConfigWizard({ onNavigate }) {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isTopologyFullscreen, setIsTopologyFullscreen] = useState(false);
 
-  // 步骤5: 算法策略配置 - 全新Tab式设计
-  const [algorithmTab, setAlgorithmTab] = useState('mode'); // mode, weight, constraint, advanced
+  // 步骤5: 算法策略配置 - 综合Tab式设计（保留所有功能）
+  const [algorithmTab, setAlgorithmTab] = useState('mode'); // mode, weight, peakValley, integration, advanced
   const [algorithmConfig, setAlgorithmConfig] = useState({
     // 调度模式
     schedulingMode: 'economic',
@@ -196,19 +198,77 @@ function ProjectConfigWizard({ onNavigate }) {
       gridPeakShaving: true,
       loadFollowing: true
     },
-    // 削峰填谷 (保留兼容)
+    // 削峰填谷配置
     peakShaving: algorithmDefaults?.peakShaving || {
       enabled: true,
       peakPeriods: [
-        { name: '早高峰', startTime: '08:00', endTime: '12:00', action: 'discharge', maxPower: 200 },
-        { name: '晚高峰', startTime: '18:00', endTime: '22:00', action: 'discharge', maxPower: 200 }
+        { id: 1, name: '早高峰', startTime: '08:00', endTime: '12:00', action: 'discharge', maxPower: 200 },
+        { id: 2, name: '晚高峰', startTime: '18:00', endTime: '22:00', action: 'discharge', maxPower: 200 }
       ],
       valleyPeriods: [
-        { name: '夜间低谷', startTime: '23:00', endTime: '07:00', action: 'charge', maxPower: 200 }
+        { id: 1, name: '夜间低谷', startTime: '23:00', endTime: '07:00', action: 'charge', maxPower: 200 }
       ]
     },
-    demandControl: algorithmDefaults?.demandControl || { enabled: false, demandLimit: 800 },
-    socManagement: algorithmDefaults?.socManagement || { minSoc: 10, maxSoc: 95, targetSoc: 60 }
+    // 需量控制
+    demandControl: algorithmDefaults?.demandControl || { 
+      enabled: false, 
+      demandLimit: 800,
+      warningThreshold: 90, // %
+      actionThreshold: 95   // %
+    },
+    // SOC管理
+    socManagement: algorithmDefaults?.socManagement || { minSoc: 10, maxSoc: 95, targetSoc: 60 },
+    // 逆功率保护
+    reversePowerProtection: {
+      enabled: false,
+      threshold: 10, // kW
+      actionDelay: 5, // 秒
+      protectMode: 'cutoff' // cutoff/reduce
+    },
+    // 风电接入策略
+    windIntegration: {
+      enabled: false,
+      priorityLevel: 1,
+      maxPowerLimit: 1000, // kW
+      rampRate: 50, // kW/min
+      curtailmentEnabled: true
+    },
+    // 光伏接入策略
+    solarIntegration: {
+      enabled: false,
+      priorityLevel: 2,
+      maxPowerLimit: 500, // kW
+      mpptOptimization: true,
+      antiBackflow: true
+    },
+    // 柴发接入策略
+    dieselIntegration: {
+      enabled: false,
+      startSocThreshold: 15, // %
+      stopSocThreshold: 80, // %
+      minRunTime: 30, // 分钟
+      cooldownTime: 10 // 分钟
+    },
+    // 充电桩接入策略
+    chargerIntegration: {
+      enabled: false,
+      maxTotalPower: 300, // kW
+      loadBalancing: true,
+      schedulingEnabled: true,
+      peakShiftEnabled: true
+    },
+    // 电价配置
+    electricityPrice: {
+      enabled: false,
+      priceType: 'tou', // tou: 分时电价, fixed: 固定电价
+      fixedPrice: 0.8, // 元/kWh
+      touPrices: [
+        { id: 1, name: '峰时', startTime: '08:00', endTime: '12:00', price: 1.2 },
+        { id: 2, name: '峰时', startTime: '18:00', endTime: '22:00', price: 1.2 },
+        { id: 3, name: '平时', startTime: '12:00', endTime: '18:00', price: 0.8 },
+        { id: 4, name: '谷时', startTime: '22:00', endTime: '08:00', price: 0.4 }
+      ]
+    }
   });
 
   // 步骤6: 告警规则配置
@@ -219,6 +279,55 @@ function ProjectConfigWizard({ onNavigate }) {
     condition: '',
     level: 'warning',
     enabled: true
+  });
+
+  // 步骤7: 北向配置
+  const northboundFileInputRef = useRef(null);
+  const [northboundConfig, setNorthboundConfig] = useState({
+    enabled: false,
+    protocol: 'mqtt',
+    serverIp: '',
+    serverPort: 1883,
+    topic: 'ems/data',
+    username: '',
+    password: '',
+    clientId: 'ems_client_001',
+    keepAlive: 60,
+    qos: 1,
+    publishInterval: 5000,
+    // 增强配置
+    heartbeatInterval: 30,
+    reconnectInterval: 5000,
+    maxReconnectAttempts: 10,
+    dataFormat: 'json',
+    compression: false,
+    encryption: false,
+    // IEC104特定配置
+    iec104Config: {
+      originatorAddress: 0,
+      commonAddress: 1,
+      k: 12,
+      w: 8,
+      t0: 30,
+      t1: 15,
+      t2: 10,
+      t3: 20
+    },
+    // Modbus服务端配置
+    modbusServerConfig: {
+      unitId: 1,
+      maxConnections: 5
+    },
+    // HTTP配置
+    httpConfig: {
+      method: 'POST',
+      contentType: 'application/json',
+      authType: 'none', // none/basic/bearer
+      authToken: ''
+    },
+    // 点表配置
+    pointTableEnabled: true,
+    pointTableMapping: []
   });
 
   // ESC key handler for modal
@@ -452,7 +561,7 @@ function ProjectConfigWizard({ onNavigate }) {
   };
 
   const handleNext = () => {
-    if (currentStep < 6) {
+    if (currentStep < 7) {
       setCurrentStep(currentStep + 1);
     } else {
       handleValidateAndComplete();
@@ -472,7 +581,8 @@ function ProjectConfigWizard({ onNavigate }) {
       { name: '设备配置有效性', status: selectedDevices.length > 0 ? 'success' : 'warning' },
       { name: '拓扑关系合法性', status: nodes.length > 0 ? 'success' : 'warning' },
       { name: '算法策略配置', status: 'success' },
-      { name: '告警规则配置', status: alarmRules.filter(r => r.enabled).length > 0 ? 'success' : 'warning' }
+      { name: '告警规则配置', status: alarmRules.filter(r => r.enabled).length > 0 ? 'success' : 'warning' },
+      { name: '北向接口配置', status: !northboundConfig.enabled || (northboundConfig.serverIp) ? 'success' : 'warning' }
     ];
     setValidationResults(results);
     setCompleted(true);
@@ -492,6 +602,7 @@ function ProjectConfigWizard({ onNavigate }) {
       },
       algorithmConfig,
       alarmRules,
+      northboundConfig,
       exportedAt: new Date().toISOString(),
       version: '2.0'
     };
@@ -530,6 +641,7 @@ function ProjectConfigWizard({ onNavigate }) {
           }
           if (config.algorithmConfig) setAlgorithmConfig(config.algorithmConfig);
           if (config.alarmRules) setAlarmRules(config.alarmRules);
+          if (config.northboundConfig) setNorthboundConfig(config.northboundConfig);
           if (config.topology?.nodes) {
             const category = (deviceType) => deviceCategories.find(c => 
               c.devices.some(d => d.id === deviceType)
@@ -596,6 +708,7 @@ function ProjectConfigWizard({ onNavigate }) {
       },
       algorithmConfig,
       alarmRules,
+      northboundConfig,
       createdAt: new Date().toISOString()
     };
 
@@ -1298,11 +1411,14 @@ function ProjectConfigWizard({ onNavigate }) {
                 background: 'var(--gray-100)', 
                 borderRadius: '12px', 
                 padding: '4px',
-                marginBottom: '24px'
+                marginBottom: '24px',
+                flexWrap: 'wrap'
               }}>
                 {[
                   { id: 'mode', name: '调度模式' },
                   { id: 'weight', name: '目标权重' },
+                  { id: 'peakValley', name: '峰谷/需量' },
+                  { id: 'integration', name: '设备接入' },
                   { id: 'constraint', name: '约束参数' },
                   { id: 'advanced', name: '高级策略' }
                 ].map(tab => (
@@ -1431,6 +1547,730 @@ function ProjectConfigWizard({ onNavigate }) {
                       </div>
                     );
                   })()}
+                </div>
+              )}
+
+              {/* 峰谷/需量Tab - 新增 */}
+              {algorithmTab === 'peakValley' && (
+                <div>
+                  {/* 削峰填谷配置 */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>⚡</span> 削峰填谷策略
+                      </h4>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={algorithmConfig.peakShaving.enabled}
+                          onChange={(e) => setAlgorithmConfig(prev => ({
+                            ...prev,
+                            peakShaving: { ...prev.peakShaving, enabled: e.target.checked }
+                          }))}
+                        />
+                        <span>启用</span>
+                      </label>
+                    </div>
+                    
+                    {algorithmConfig.peakShaving.enabled && (
+                      <>
+                        {/* 峰时段配置 */}
+                        <div style={{ marginBottom: '16px', padding: '16px', background: '#fef3c7', borderRadius: '8px' }}>
+                          <div style={{ fontWeight: '600', marginBottom: '12px', color: '#b45309' }}>🔺 峰时段（放电）</div>
+                          {algorithmConfig.peakShaving.peakPeriods.map((period, index) => (
+                            <div key={period.id} style={{ display: 'flex', gap: '12px', marginBottom: '8px', alignItems: 'center' }}>
+                              <input
+                                type="text"
+                                className="form-input"
+                                style={{ width: '100px' }}
+                                value={period.name}
+                                onChange={(e) => {
+                                  const newPeriods = [...algorithmConfig.peakShaving.peakPeriods];
+                                  newPeriods[index] = { ...period, name: e.target.value };
+                                  setAlgorithmConfig(prev => ({
+                                    ...prev,
+                                    peakShaving: { ...prev.peakShaving, peakPeriods: newPeriods }
+                                  }));
+                                }}
+                              />
+                              <input
+                                type="time"
+                                className="form-input"
+                                style={{ width: '120px' }}
+                                value={period.startTime}
+                                onChange={(e) => {
+                                  const newPeriods = [...algorithmConfig.peakShaving.peakPeriods];
+                                  newPeriods[index] = { ...period, startTime: e.target.value };
+                                  setAlgorithmConfig(prev => ({
+                                    ...prev,
+                                    peakShaving: { ...prev.peakShaving, peakPeriods: newPeriods }
+                                  }));
+                                }}
+                              />
+                              <span>-</span>
+                              <input
+                                type="time"
+                                className="form-input"
+                                style={{ width: '120px' }}
+                                value={period.endTime}
+                                onChange={(e) => {
+                                  const newPeriods = [...algorithmConfig.peakShaving.peakPeriods];
+                                  newPeriods[index] = { ...period, endTime: e.target.value };
+                                  setAlgorithmConfig(prev => ({
+                                    ...prev,
+                                    peakShaving: { ...prev.peakShaving, peakPeriods: newPeriods }
+                                  }));
+                                }}
+                              />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ width: '80px' }}
+                                  value={period.maxPower}
+                                  onChange={(e) => {
+                                    const newPeriods = [...algorithmConfig.peakShaving.peakPeriods];
+                                    newPeriods[index] = { ...period, maxPower: Number(e.target.value) };
+                                    setAlgorithmConfig(prev => ({
+                                      ...prev,
+                                      peakShaving: { ...prev.peakShaving, peakPeriods: newPeriods }
+                                    }));
+                                  }}
+                                />
+                                <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>kW</span>
+                              </div>
+                              <button
+                                className="btn btn-sm"
+                                style={{ background: '#fee2e2', color: '#dc2626', border: 'none' }}
+                                onClick={() => {
+                                  const newPeriods = algorithmConfig.peakShaving.peakPeriods.filter((_, i) => i !== index);
+                                  setAlgorithmConfig(prev => ({
+                                    ...prev,
+                                    peakShaving: { ...prev.peakShaving, peakPeriods: newPeriods }
+                                  }));
+                                }}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => {
+                              const newPeriod = { id: Date.now(), name: '新峰时段', startTime: '09:00', endTime: '11:00', action: 'discharge', maxPower: 200 };
+                              setAlgorithmConfig(prev => ({
+                                ...prev,
+                                peakShaving: { ...prev.peakShaving, peakPeriods: [...prev.peakShaving.peakPeriods, newPeriod] }
+                              }));
+                            }}
+                          >
+                            + 添加峰时段
+                          </button>
+                        </div>
+
+                        {/* 谷时段配置 */}
+                        <div style={{ padding: '16px', background: '#dbeafe', borderRadius: '8px' }}>
+                          <div style={{ fontWeight: '600', marginBottom: '12px', color: '#1d4ed8' }}>🔻 谷时段（充电）</div>
+                          {algorithmConfig.peakShaving.valleyPeriods.map((period, index) => (
+                            <div key={period.id} style={{ display: 'flex', gap: '12px', marginBottom: '8px', alignItems: 'center' }}>
+                              <input
+                                type="text"
+                                className="form-input"
+                                style={{ width: '100px' }}
+                                value={period.name}
+                                onChange={(e) => {
+                                  const newPeriods = [...algorithmConfig.peakShaving.valleyPeriods];
+                                  newPeriods[index] = { ...period, name: e.target.value };
+                                  setAlgorithmConfig(prev => ({
+                                    ...prev,
+                                    peakShaving: { ...prev.peakShaving, valleyPeriods: newPeriods }
+                                  }));
+                                }}
+                              />
+                              <input
+                                type="time"
+                                className="form-input"
+                                style={{ width: '120px' }}
+                                value={period.startTime}
+                                onChange={(e) => {
+                                  const newPeriods = [...algorithmConfig.peakShaving.valleyPeriods];
+                                  newPeriods[index] = { ...period, startTime: e.target.value };
+                                  setAlgorithmConfig(prev => ({
+                                    ...prev,
+                                    peakShaving: { ...prev.peakShaving, valleyPeriods: newPeriods }
+                                  }));
+                                }}
+                              />
+                              <span>-</span>
+                              <input
+                                type="time"
+                                className="form-input"
+                                style={{ width: '120px' }}
+                                value={period.endTime}
+                                onChange={(e) => {
+                                  const newPeriods = [...algorithmConfig.peakShaving.valleyPeriods];
+                                  newPeriods[index] = { ...period, endTime: e.target.value };
+                                  setAlgorithmConfig(prev => ({
+                                    ...prev,
+                                    peakShaving: { ...prev.peakShaving, valleyPeriods: newPeriods }
+                                  }));
+                                }}
+                              />
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <input
+                                  type="number"
+                                  className="form-input"
+                                  style={{ width: '80px' }}
+                                  value={period.maxPower}
+                                  onChange={(e) => {
+                                    const newPeriods = [...algorithmConfig.peakShaving.valleyPeriods];
+                                    newPeriods[index] = { ...period, maxPower: Number(e.target.value) };
+                                    setAlgorithmConfig(prev => ({
+                                      ...prev,
+                                      peakShaving: { ...prev.peakShaving, valleyPeriods: newPeriods }
+                                    }));
+                                  }}
+                                />
+                                <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>kW</span>
+                              </div>
+                              <button
+                                className="btn btn-sm"
+                                style={{ background: '#fee2e2', color: '#dc2626', border: 'none' }}
+                                onClick={() => {
+                                  const newPeriods = algorithmConfig.peakShaving.valleyPeriods.filter((_, i) => i !== index);
+                                  setAlgorithmConfig(prev => ({
+                                    ...prev,
+                                    peakShaving: { ...prev.peakShaving, valleyPeriods: newPeriods }
+                                  }));
+                                }}
+                              >
+                                删除
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            className="btn btn-sm btn-secondary"
+                            onClick={() => {
+                              const newPeriod = { id: Date.now(), name: '新谷时段', startTime: '00:00', endTime: '06:00', action: 'charge', maxPower: 200 };
+                              setAlgorithmConfig(prev => ({
+                                ...prev,
+                                peakShaving: { ...prev.peakShaving, valleyPeriods: [...prev.peakShaving.valleyPeriods, newPeriod] }
+                              }));
+                            }}
+                          >
+                            + 添加谷时段
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {/* 需量控制配置 */}
+                  <div style={{ marginBottom: '24px', padding: '20px', background: 'var(--gray-50)', borderRadius: '12px', border: '1px solid var(--gray-200)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>📊</span> 需量控制
+                      </h4>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={algorithmConfig.demandControl.enabled}
+                          onChange={(e) => setAlgorithmConfig(prev => ({
+                            ...prev,
+                            demandControl: { ...prev.demandControl, enabled: e.target.checked }
+                          }))}
+                        />
+                        <span>启用</span>
+                      </label>
+                    </div>
+                    
+                    {algorithmConfig.demandControl.enabled && (
+                      <div className="form-row form-row-3">
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">需量限制</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="number"
+                              className="form-input"
+                              value={algorithmConfig.demandControl.demandLimit}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev,
+                                demandControl: { ...prev.demandControl, demandLimit: Number(e.target.value) }
+                              }))}
+                            />
+                            <span style={{ color: 'var(--gray-500)' }}>kW</span>
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">预警阈值</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="number"
+                              className="form-input"
+                              value={algorithmConfig.demandControl.warningThreshold}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev,
+                                demandControl: { ...prev.demandControl, warningThreshold: Number(e.target.value) }
+                              }))}
+                            />
+                            <span style={{ color: 'var(--gray-500)' }}>%</span>
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">动作阈值</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="number"
+                              className="form-input"
+                              value={algorithmConfig.demandControl.actionThreshold}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev,
+                                demandControl: { ...prev.demandControl, actionThreshold: Number(e.target.value) }
+                              }))}
+                            />
+                            <span style={{ color: 'var(--gray-500)' }}>%</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 电价配置 */}
+                  <div style={{ padding: '20px', background: 'var(--gray-50)', borderRadius: '12px', border: '1px solid var(--gray-200)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>💰</span> 电价配置
+                      </h4>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={algorithmConfig.electricityPrice.enabled}
+                          onChange={(e) => setAlgorithmConfig(prev => ({
+                            ...prev,
+                            electricityPrice: { ...prev.electricityPrice, enabled: e.target.checked }
+                          }))}
+                        />
+                        <span>启用电价优化</span>
+                      </label>
+                    </div>
+                    
+                    {algorithmConfig.electricityPrice.enabled && (
+                      <>
+                        <div style={{ marginBottom: '16px' }}>
+                          <label className="form-label">电价类型</label>
+                          <div style={{ display: 'flex', gap: '16px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input
+                                type="radio"
+                                checked={algorithmConfig.electricityPrice.priceType === 'fixed'}
+                                onChange={() => setAlgorithmConfig(prev => ({
+                                  ...prev,
+                                  electricityPrice: { ...prev.electricityPrice, priceType: 'fixed' }
+                                }))}
+                              />
+                              固定电价
+                            </label>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
+                              <input
+                                type="radio"
+                                checked={algorithmConfig.electricityPrice.priceType === 'tou'}
+                                onChange={() => setAlgorithmConfig(prev => ({
+                                  ...prev,
+                                  electricityPrice: { ...prev.electricityPrice, priceType: 'tou' }
+                                }))}
+                              />
+                              分时电价
+                            </label>
+                          </div>
+                        </div>
+                        
+                        {algorithmConfig.electricityPrice.priceType === 'fixed' ? (
+                          <div className="form-group" style={{ maxWidth: '200px' }}>
+                            <label className="form-label">固定电价</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <input
+                                type="number"
+                                className="form-input"
+                                step="0.01"
+                                value={algorithmConfig.electricityPrice.fixedPrice}
+                                onChange={(e) => setAlgorithmConfig(prev => ({
+                                  ...prev,
+                                  electricityPrice: { ...prev.electricityPrice, fixedPrice: Number(e.target.value) }
+                                }))}
+                              />
+                              <span style={{ color: 'var(--gray-500)' }}>元/kWh</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            {algorithmConfig.electricityPrice.touPrices.map((price, index) => (
+                              <div key={price.id} style={{ display: 'flex', gap: '12px', marginBottom: '8px', alignItems: 'center' }}>
+                                <select
+                                  className="form-select"
+                                  style={{ width: '80px' }}
+                                  value={price.name}
+                                  onChange={(e) => {
+                                    const newPrices = [...algorithmConfig.electricityPrice.touPrices];
+                                    newPrices[index] = { ...price, name: e.target.value };
+                                    setAlgorithmConfig(prev => ({
+                                      ...prev,
+                                      electricityPrice: { ...prev.electricityPrice, touPrices: newPrices }
+                                    }));
+                                  }}
+                                >
+                                  <option value="峰时">峰时</option>
+                                  <option value="平时">平时</option>
+                                  <option value="谷时">谷时</option>
+                                  <option value="尖峰">尖峰</option>
+                                </select>
+                                <input
+                                  type="time"
+                                  className="form-input"
+                                  style={{ width: '120px' }}
+                                  value={price.startTime}
+                                  onChange={(e) => {
+                                    const newPrices = [...algorithmConfig.electricityPrice.touPrices];
+                                    newPrices[index] = { ...price, startTime: e.target.value };
+                                    setAlgorithmConfig(prev => ({
+                                      ...prev,
+                                      electricityPrice: { ...prev.electricityPrice, touPrices: newPrices }
+                                    }));
+                                  }}
+                                />
+                                <span>-</span>
+                                <input
+                                  type="time"
+                                  className="form-input"
+                                  style={{ width: '120px' }}
+                                  value={price.endTime}
+                                  onChange={(e) => {
+                                    const newPrices = [...algorithmConfig.electricityPrice.touPrices];
+                                    newPrices[index] = { ...price, endTime: e.target.value };
+                                    setAlgorithmConfig(prev => ({
+                                      ...prev,
+                                      electricityPrice: { ...prev.electricityPrice, touPrices: newPrices }
+                                    }));
+                                  }}
+                                />
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <input
+                                    type="number"
+                                    className="form-input"
+                                    style={{ width: '80px' }}
+                                    step="0.01"
+                                    value={price.price}
+                                    onChange={(e) => {
+                                      const newPrices = [...algorithmConfig.electricityPrice.touPrices];
+                                      newPrices[index] = { ...price, price: Number(e.target.value) };
+                                      setAlgorithmConfig(prev => ({
+                                        ...prev,
+                                        electricityPrice: { ...prev.electricityPrice, touPrices: newPrices }
+                                      }));
+                                    }}
+                                  />
+                                  <span style={{ fontSize: '12px', color: 'var(--gray-500)' }}>元/kWh</span>
+                                </div>
+                                <button
+                                  className="btn btn-sm"
+                                  style={{ background: '#fee2e2', color: '#dc2626', border: 'none' }}
+                                  onClick={() => {
+                                    const newPrices = algorithmConfig.electricityPrice.touPrices.filter((_, i) => i !== index);
+                                    setAlgorithmConfig(prev => ({
+                                      ...prev,
+                                      electricityPrice: { ...prev.electricityPrice, touPrices: newPrices }
+                                    }));
+                                  }}
+                                >
+                                  删除
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => {
+                                const newPrice = { id: Date.now(), name: '平时', startTime: '06:00', endTime: '08:00', price: 0.6 };
+                                setAlgorithmConfig(prev => ({
+                                  ...prev,
+                                  electricityPrice: { ...prev.electricityPrice, touPrices: [...prev.electricityPrice.touPrices, newPrice] }
+                                }));
+                              }}
+                            >
+                              + 添加时段
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 设备接入策略Tab - 新增 */}
+              {algorithmTab === 'integration' && (
+                <div>
+                  <div className="notice-banner info" style={{ marginBottom: '20px' }}>
+                    <span>💡</span>
+                    <span>根据项目接入的设备类型，配置相应的接入策略。启用后系统会根据策略优化调度。</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                    {/* 风电接入 */}
+                    <div style={{ padding: '20px', background: '#dbeafe', borderRadius: '12px', border: '1px solid #93c5fd' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#1d4ed8' }}>
+                          <span>🌬️</span> 风电接入
+                        </h4>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={algorithmConfig.windIntegration.enabled}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              windIntegration: { ...prev.windIntegration, enabled: e.target.checked }
+                            }))}
+                          />
+                          <span>启用</span>
+                        </label>
+                      </div>
+                      {algorithmConfig.windIntegration.enabled && (
+                        <div style={{ fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>优先级</span>
+                            <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }}
+                              value={algorithmConfig.windIntegration.priorityLevel}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, windIntegration: { ...prev.windIntegration, priorityLevel: Number(e.target.value) }
+                              }))} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>限功率 (kW)</span>
+                            <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
+                              value={algorithmConfig.windIntegration.maxPowerLimit}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, windIntegration: { ...prev.windIntegration, maxPowerLimit: Number(e.target.value) }
+                              }))} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>爬坡率 (kW/min)</span>
+                            <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
+                              value={algorithmConfig.windIntegration.rampRate}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, windIntegration: { ...prev.windIntegration, rampRate: Number(e.target.value) }
+                              }))} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 光伏接入 */}
+                    <div style={{ padding: '20px', background: '#fef3c7', borderRadius: '12px', border: '1px solid #fcd34d' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309' }}>
+                          <span>☀️</span> 光伏接入
+                        </h4>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={algorithmConfig.solarIntegration.enabled}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              solarIntegration: { ...prev.solarIntegration, enabled: e.target.checked }
+                            }))}
+                          />
+                          <span>启用</span>
+                        </label>
+                      </div>
+                      {algorithmConfig.solarIntegration.enabled && (
+                        <div style={{ fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>优先级</span>
+                            <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }}
+                              value={algorithmConfig.solarIntegration.priorityLevel}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, solarIntegration: { ...prev.solarIntegration, priorityLevel: Number(e.target.value) }
+                              }))} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>限功率 (kW)</span>
+                            <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
+                              value={algorithmConfig.solarIntegration.maxPowerLimit}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, solarIntegration: { ...prev.solarIntegration, maxPowerLimit: Number(e.target.value) }
+                              }))} />
+                          </div>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={algorithmConfig.solarIntegration.antiBackflow}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, solarIntegration: { ...prev.solarIntegration, antiBackflow: e.target.checked }
+                              }))} />
+                            <span>防逆流</span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 柴发接入 */}
+                    <div style={{ padding: '20px', background: '#f3f4f6', borderRadius: '12px', border: '1px solid #d1d5db' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#4b5563' }}>
+                          <span>⛽</span> 柴发接入
+                        </h4>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={algorithmConfig.dieselIntegration.enabled}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              dieselIntegration: { ...prev.dieselIntegration, enabled: e.target.checked }
+                            }))}
+                          />
+                          <span>启用</span>
+                        </label>
+                      </div>
+                      {algorithmConfig.dieselIntegration.enabled && (
+                        <div style={{ fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>启动SOC阈值 (%)</span>
+                            <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }}
+                              value={algorithmConfig.dieselIntegration.startSocThreshold}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, dieselIntegration: { ...prev.dieselIntegration, startSocThreshold: Number(e.target.value) }
+                              }))} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>停止SOC阈值 (%)</span>
+                            <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }}
+                              value={algorithmConfig.dieselIntegration.stopSocThreshold}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, dieselIntegration: { ...prev.dieselIntegration, stopSocThreshold: Number(e.target.value) }
+                              }))} />
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <span>最小运行时间 (分钟)</span>
+                            <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }}
+                              value={algorithmConfig.dieselIntegration.minRunTime}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, dieselIntegration: { ...prev.dieselIntegration, minRunTime: Number(e.target.value) }
+                              }))} />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 充电桩接入 */}
+                    <div style={{ padding: '20px', background: '#ede9fe', borderRadius: '12px', border: '1px solid #c4b5fd' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                        <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#6d28d9' }}>
+                          <span>🔌</span> 充电桩接入
+                        </h4>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                          <input
+                            type="checkbox"
+                            checked={algorithmConfig.chargerIntegration.enabled}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              chargerIntegration: { ...prev.chargerIntegration, enabled: e.target.checked }
+                            }))}
+                          />
+                          <span>启用</span>
+                        </label>
+                      </div>
+                      {algorithmConfig.chargerIntegration.enabled && (
+                        <div style={{ fontSize: '13px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                            <span>总功率限制 (kW)</span>
+                            <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
+                              value={algorithmConfig.chargerIntegration.maxTotalPower}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, chargerIntegration: { ...prev.chargerIntegration, maxTotalPower: Number(e.target.value) }
+                              }))} />
+                          </div>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '8px' }}>
+                            <input type="checkbox" checked={algorithmConfig.chargerIntegration.loadBalancing}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, chargerIntegration: { ...prev.chargerIntegration, loadBalancing: e.target.checked }
+                              }))} />
+                            <span>负载均衡</span>
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                            <input type="checkbox" checked={algorithmConfig.chargerIntegration.peakShiftEnabled}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev, chargerIntegration: { ...prev.chargerIntegration, peakShiftEnabled: e.target.checked }
+                              }))} />
+                            <span>削峰充电</span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 逆功率保护 */}
+                  <div style={{ marginTop: '20px', padding: '20px', background: '#fee2e2', borderRadius: '12px', border: '1px solid #fca5a5' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: '#dc2626' }}>
+                        <span>🛡️</span> 逆功率保护
+                      </h4>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={algorithmConfig.reversePowerProtection.enabled}
+                          onChange={(e) => setAlgorithmConfig(prev => ({
+                            ...prev,
+                            reversePowerProtection: { ...prev.reversePowerProtection, enabled: e.target.checked }
+                          }))}
+                        />
+                        <span>启用</span>
+                      </label>
+                    </div>
+                    {algorithmConfig.reversePowerProtection.enabled && (
+                      <div className="form-row form-row-3">
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">保护阈值</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="number"
+                              className="form-input"
+                              value={algorithmConfig.reversePowerProtection.threshold}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev,
+                                reversePowerProtection: { ...prev.reversePowerProtection, threshold: Number(e.target.value) }
+                              }))}
+                            />
+                            <span style={{ color: 'var(--gray-500)' }}>kW</span>
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">动作延时</label>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="number"
+                              className="form-input"
+                              value={algorithmConfig.reversePowerProtection.actionDelay}
+                              onChange={(e) => setAlgorithmConfig(prev => ({
+                                ...prev,
+                                reversePowerProtection: { ...prev.reversePowerProtection, actionDelay: Number(e.target.value) }
+                              }))}
+                            />
+                            <span style={{ color: 'var(--gray-500)' }}>秒</span>
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">保护模式</label>
+                          <select
+                            className="form-select"
+                            value={algorithmConfig.reversePowerProtection.protectMode}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              reversePowerProtection: { ...prev.reversePowerProtection, protectMode: e.target.value }
+                            }))}
+                          >
+                            <option value="cutoff">切断</option>
+                            <option value="reduce">降功率</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1938,6 +2778,639 @@ function ProjectConfigWizard({ onNavigate }) {
               )}
             </div>
           )}
+
+          {/* 步骤7: 北向配置 */}
+          {currentStep === 7 && (
+            <div>
+              <div className="form-section">
+                <div className="form-section-header">
+                  <span className="form-section-icon">🌐</span>
+                  <div>
+                    <h3 className="form-section-title">北向接口配置</h3>
+                    <p className="form-section-desc">配置数据上报到上级平台的接口参数，包括协议、地址、点表映射等</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 北向配置启用开关 */}
+              <div style={{ 
+                marginBottom: '24px', 
+                padding: '20px', 
+                background: 'linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%)', 
+                borderRadius: '12px',
+                color: 'white'
+              }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={northboundConfig.enabled}
+                    onChange={(e) => setNorthboundConfig(prev => ({ ...prev, enabled: e.target.checked }))}
+                    style={{ width: '20px', height: '20px' }}
+                  />
+                  <div>
+                    <div style={{ fontWeight: '600', fontSize: '16px' }}>启用北向数据上报</div>
+                    <div style={{ fontSize: '13px', opacity: 0.8 }}>开启后EMS将向上级平台上报数据</div>
+                  </div>
+                </label>
+              </div>
+
+              {northboundConfig.enabled && (
+                <>
+                  {/* 协议选择和基本配置 */}
+                  <div style={{ marginBottom: '24px', padding: '20px', background: 'var(--gray-50)', borderRadius: '12px', border: '1px solid var(--gray-200)' }}>
+                    <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>📡</span> 协议配置
+                    </h4>
+                    <div className="form-row form-row-4">
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">协议类型</label>
+                        <select
+                          className="form-select"
+                          value={northboundConfig.protocol}
+                          onChange={(e) => {
+                            const protocol = northboundProtocols?.find(p => p.id === e.target.value);
+                            setNorthboundConfig(prev => ({
+                              ...prev,
+                              protocol: e.target.value,
+                              serverPort: protocol?.port || 1883
+                            }));
+                          }}
+                        >
+                          <option value="mqtt">MQTT</option>
+                          <option value="iec104_server">IEC 104 服务端</option>
+                          <option value="modbus_tcp_server">Modbus TCP 服务端</option>
+                          <option value="http">HTTP REST API</option>
+                          <option value="https">HTTPS REST API</option>
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">服务器地址</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="192.168.1.200"
+                          value={northboundConfig.serverIp}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, serverIp: e.target.value }))}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">端口号</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.serverPort}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, serverPort: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">上报周期 (ms)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.publishInterval}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, publishInterval: Number(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MQTT特定配置 */}
+                  {northboundConfig.protocol === 'mqtt' && (
+                    <div style={{ marginBottom: '24px', padding: '20px', background: '#dbeafe', borderRadius: '12px', border: '1px solid #93c5fd' }}>
+                      <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#1d4ed8' }}>
+                        <span>📨</span> MQTT配置
+                      </h4>
+                      <div className="form-row form-row-3">
+                        <div className="form-group" style={{ marginBottom: '12px' }}>
+                          <label className="form-label">Topic</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder="ems/data"
+                            value={northboundConfig.topic}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, topic: e.target.value }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: '12px' }}>
+                          <label className="form-label">Client ID</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            value={northboundConfig.clientId}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, clientId: e.target.value }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: '12px' }}>
+                          <label className="form-label">QoS等级</label>
+                          <select
+                            className="form-select"
+                            value={northboundConfig.qos}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, qos: Number(e.target.value) }))}
+                          >
+                            <option value={0}>QoS 0 - 最多一次</option>
+                            <option value={1}>QoS 1 - 至少一次</option>
+                            <option value={2}>QoS 2 - 恰好一次</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="form-row form-row-3">
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">Keep Alive (s)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.keepAlive}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, keepAlive: Number(e.target.value) }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">用户名</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            placeholder="可选"
+                            value={northboundConfig.username}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, username: e.target.value }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">密码</label>
+                          <input
+                            type="password"
+                            className="form-input"
+                            placeholder="可选"
+                            value={northboundConfig.password}
+                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, password: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* IEC104特定配置 */}
+                  {northboundConfig.protocol === 'iec104_server' && (
+                    <div style={{ marginBottom: '24px', padding: '20px', background: '#fef3c7', borderRadius: '12px', border: '1px solid #fcd34d' }}>
+                      <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#b45309' }}>
+                        <span>⚡</span> IEC 104配置
+                      </h4>
+                      <div className="form-row form-row-3">
+                        <div className="form-group" style={{ marginBottom: '12px' }}>
+                          <label className="form-label">公共地址</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.iec104Config.commonAddress}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              iec104Config: { ...prev.iec104Config, commonAddress: Number(e.target.value) }
+                            }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: '12px' }}>
+                          <label className="form-label">K值</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.iec104Config.k}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              iec104Config: { ...prev.iec104Config, k: Number(e.target.value) }
+                            }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: '12px' }}>
+                          <label className="form-label">W值</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.iec104Config.w}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              iec104Config: { ...prev.iec104Config, w: Number(e.target.value) }
+                            }))}
+                          />
+                        </div>
+                      </div>
+                      <div className="form-row form-row-3">
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">T1超时 (s)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.iec104Config.t1}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              iec104Config: { ...prev.iec104Config, t1: Number(e.target.value) }
+                            }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">T2超时 (s)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.iec104Config.t2}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              iec104Config: { ...prev.iec104Config, t2: Number(e.target.value) }
+                            }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">T3超时 (s)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.iec104Config.t3}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              iec104Config: { ...prev.iec104Config, t3: Number(e.target.value) }
+                            }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* HTTP特定配置 */}
+                  {(northboundConfig.protocol === 'http' || northboundConfig.protocol === 'https') && (
+                    <div style={{ marginBottom: '24px', padding: '20px', background: '#d1fae5', borderRadius: '12px', border: '1px solid #6ee7b7' }}>
+                      <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#047857' }}>
+                        <span>🌐</span> HTTP配置
+                      </h4>
+                      <div className="form-row form-row-3">
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">请求方法</label>
+                          <select
+                            className="form-select"
+                            value={northboundConfig.httpConfig.method}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              httpConfig: { ...prev.httpConfig, method: e.target.value }
+                            }))}
+                          >
+                            <option value="POST">POST</option>
+                            <option value="PUT">PUT</option>
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">Content-Type</label>
+                          <select
+                            className="form-select"
+                            value={northboundConfig.httpConfig.contentType}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              httpConfig: { ...prev.httpConfig, contentType: e.target.value }
+                            }))}
+                          >
+                            <option value="application/json">application/json</option>
+                            <option value="application/xml">application/xml</option>
+                          </select>
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">认证方式</label>
+                          <select
+                            className="form-select"
+                            value={northboundConfig.httpConfig.authType}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              httpConfig: { ...prev.httpConfig, authType: e.target.value }
+                            }))}
+                          >
+                            <option value="none">无认证</option>
+                            <option value="basic">Basic Auth</option>
+                            <option value="bearer">Bearer Token</option>
+                          </select>
+                        </div>
+                      </div>
+                      {northboundConfig.httpConfig.authType === 'bearer' && (
+                        <div className="form-group" style={{ marginTop: '12px', marginBottom: 0 }}>
+                          <label className="form-label">Token</label>
+                          <input
+                            type="password"
+                            className="form-input"
+                            placeholder="Bearer Token"
+                            value={northboundConfig.httpConfig.authToken}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              httpConfig: { ...prev.httpConfig, authToken: e.target.value }
+                            }))}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Modbus TCP服务端配置 */}
+                  {northboundConfig.protocol === 'modbus_tcp_server' && (
+                    <div style={{ marginBottom: '24px', padding: '20px', background: '#ede9fe', borderRadius: '12px', border: '1px solid #c4b5fd' }}>
+                      <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#6d28d9' }}>
+                        <span>🔌</span> Modbus TCP服务端配置
+                      </h4>
+                      <div className="form-row">
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">从站地址</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            min="1"
+                            max="247"
+                            value={northboundConfig.modbusServerConfig.unitId}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              modbusServerConfig: { ...prev.modbusServerConfig, unitId: Number(e.target.value) }
+                            }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">最大连接数</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={northboundConfig.modbusServerConfig.maxConnections}
+                            onChange={(e) => setNorthboundConfig(prev => ({ 
+                              ...prev, 
+                              modbusServerConfig: { ...prev.modbusServerConfig, maxConnections: Number(e.target.value) }
+                            }))}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 高级配置 */}
+                  <div style={{ marginBottom: '24px', padding: '20px', background: 'var(--gray-50)', borderRadius: '12px', border: '1px solid var(--gray-200)' }}>
+                    <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>⚙️</span> 高级配置
+                    </h4>
+                    <div className="form-row form-row-3">
+                      <div className="form-group" style={{ marginBottom: '12px' }}>
+                        <label className="form-label">心跳间隔 (s)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.heartbeatInterval}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, heartbeatInterval: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: '12px' }}>
+                        <label className="form-label">重连间隔 (ms)</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.reconnectInterval}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, reconnectInterval: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: '12px' }}>
+                        <label className="form-label">最大重连次数</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={northboundConfig.maxReconnectAttempts}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, maxReconnectAttempts: Number(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: '24px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={northboundConfig.compression}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, compression: e.target.checked }))}
+                        />
+                        <span>启用数据压缩</span>
+                      </label>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={northboundConfig.encryption}
+                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, encryption: e.target.checked }))}
+                        />
+                        <span>启用数据加密</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {/* 点表配置 */}
+                  <div style={{ padding: '20px', background: 'var(--gray-50)', borderRadius: '12px', border: '1px solid var(--gray-200)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                      <h4 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span>📋</span> 点表配置
+                      </h4>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="file"
+                          ref={northboundFileInputRef}
+                          className="hidden-input"
+                          accept=".json"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = '';
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                try {
+                                  const pointTable = JSON.parse(event.target.result);
+                                  if (Array.isArray(pointTable)) {
+                                    const validatedPoints = pointTable.map((point, index) => ({
+                                      id: point.id || Date.now() + index,
+                                      sourcePath: point.sourcePath || '',
+                                      targetPath: point.targetPath || '',
+                                      dataType: point.dataType || 'float',
+                                      scale: typeof point.scale === 'number' ? point.scale : 1,
+                                      offset: typeof point.offset === 'number' ? point.offset : 0,
+                                      enabled: point.enabled !== false
+                                    }));
+                                    setNorthboundConfig(prev => ({
+                                      ...prev,
+                                      pointTableMapping: validatedPoints
+                                    }));
+                                    alert(`成功导入 ${validatedPoints.length} 个点位配置`);
+                                  } else {
+                                    alert('点表格式错误，请使用数组格式');
+                                  }
+                                } catch (err) {
+                                  alert('点表文件解析失败');
+                                }
+                              };
+                              reader.readAsText(file);
+                            }
+                          }}
+                        />
+                        <button 
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => northboundFileInputRef.current?.click()}
+                        >
+                          📤 导入点表
+                        </button>
+                        <button 
+                          className="btn btn-sm btn-secondary"
+                          onClick={() => {
+                            const blob = new Blob([JSON.stringify(northboundConfig.pointTableMapping, null, 2)], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = 'northbound_point_table.json';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+                          }}
+                        >
+                          📥 导出点表
+                        </button>
+                        <button 
+                          className="btn btn-sm btn-primary"
+                          onClick={() => {
+                            const newPoint = {
+                              id: Date.now(),
+                              sourcePath: '',
+                              targetPath: '',
+                              dataType: 'float',
+                              scale: 1,
+                              offset: 0,
+                              enabled: true
+                            };
+                            setNorthboundConfig(prev => ({
+                              ...prev,
+                              pointTableMapping: [...prev.pointTableMapping, newPoint]
+                            }));
+                          }}
+                        >
+                          ➕ 新增点位
+                        </button>
+                      </div>
+                    </div>
+
+                    {northboundConfig.pointTableMapping.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '40px', color: 'var(--gray-400)' }}>
+                        <div style={{ fontSize: '40px', marginBottom: '12px' }}>📋</div>
+                        <div>暂无点表配置，点击"新增点位"或"导入点表"开始配置</div>
+                      </div>
+                    ) : (
+                      <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr style={{ background: 'var(--gray-100)' }}>
+                              <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px' }}>源路径</th>
+                              <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px' }}>目标路径</th>
+                              <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px' }}>数据类型</th>
+                              <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px' }}>系数</th>
+                              <th style={{ padding: '10px', textAlign: 'left', fontSize: '12px' }}>偏移</th>
+                              <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px' }}>启用</th>
+                              <th style={{ padding: '10px', textAlign: 'center', fontSize: '12px' }}>操作</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {northboundConfig.pointTableMapping.map((point, index) => (
+                              <tr key={point.id} style={{ borderBottom: '1px solid var(--gray-200)' }}>
+                                <td style={{ padding: '8px' }}>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    style={{ fontSize: '12px', padding: '6px' }}
+                                    placeholder="如: device1.voltage"
+                                    value={point.sourcePath}
+                                    onChange={(e) => {
+                                      const newPoints = [...northboundConfig.pointTableMapping];
+                                      newPoints[index] = { ...point, sourcePath: e.target.value };
+                                      setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newPoints }));
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ padding: '8px' }}>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    style={{ fontSize: '12px', padding: '6px' }}
+                                    placeholder="如: 1001"
+                                    value={point.targetPath}
+                                    onChange={(e) => {
+                                      const newPoints = [...northboundConfig.pointTableMapping];
+                                      newPoints[index] = { ...point, targetPath: e.target.value };
+                                      setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newPoints }));
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ padding: '8px' }}>
+                                  <select
+                                    className="form-select"
+                                    style={{ fontSize: '12px', padding: '6px' }}
+                                    value={point.dataType}
+                                    onChange={(e) => {
+                                      const newPoints = [...northboundConfig.pointTableMapping];
+                                      newPoints[index] = { ...point, dataType: e.target.value };
+                                      setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newPoints }));
+                                    }}
+                                  >
+                                    <option value="float">Float</option>
+                                    <option value="int">Int</option>
+                                    <option value="bool">Bool</option>
+                                    <option value="string">String</option>
+                                  </select>
+                                </td>
+                                <td style={{ padding: '8px' }}>
+                                  <input
+                                    type="number"
+                                    className="form-input"
+                                    style={{ width: '70px', fontSize: '12px', padding: '6px' }}
+                                    step="0.01"
+                                    value={point.scale}
+                                    onChange={(e) => {
+                                      const newPoints = [...northboundConfig.pointTableMapping];
+                                      newPoints[index] = { ...point, scale: Number(e.target.value) };
+                                      setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newPoints }));
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ padding: '8px' }}>
+                                  <input
+                                    type="number"
+                                    className="form-input"
+                                    style={{ width: '70px', fontSize: '12px', padding: '6px' }}
+                                    value={point.offset}
+                                    onChange={(e) => {
+                                      const newPoints = [...northboundConfig.pointTableMapping];
+                                      newPoints[index] = { ...point, offset: Number(e.target.value) };
+                                      setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newPoints }));
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ padding: '8px', textAlign: 'center' }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={point.enabled}
+                                    onChange={(e) => {
+                                      const newPoints = [...northboundConfig.pointTableMapping];
+                                      newPoints[index] = { ...point, enabled: e.target.checked };
+                                      setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newPoints }));
+                                    }}
+                                  />
+                                </td>
+                                <td style={{ padding: '8px', textAlign: 'center' }}>
+                                  <button
+                                    className="btn btn-sm"
+                                    style={{ background: '#fee2e2', color: '#dc2626', border: 'none', padding: '4px 8px' }}
+                                    onClick={() => {
+                                      const newPoints = northboundConfig.pointTableMapping.filter((_, i) => i !== index);
+                                      setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newPoints }));
+                                    }}
+                                  >
+                                    删除
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {/* 底部导航按钮 */}
@@ -1953,7 +3426,7 @@ function ProjectConfigWizard({ onNavigate }) {
             className="btn btn-primary btn-lg"
             onClick={handleNext}
           >
-            {currentStep === 6 ? '完成配置 →' : '下一步 →'}
+            {currentStep === 7 ? '完成配置 →' : '下一步 →'}
           </button>
         </div>
       </div>
