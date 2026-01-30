@@ -31,6 +31,38 @@ function DeviceModelWizard({ onNavigate }) {
   const customFieldCounter = useRef(0);
   const pointTableFileRef = useRef(null);
   const [customPointTable, setCustomPointTable] = useState([]);
+  
+  // 点表编辑状态
+  const [pointModalOpen, setPointModalOpen] = useState(false);
+  const [editingPointIndex, setEditingPointIndex] = useState(-1); // -1表示新增
+  const [pointForm, setPointForm] = useState({
+    name: '',
+    address: '',
+    type: 'uint16',
+    rw: 'R',
+    functionCode: '03',
+    byteOrder: 'big',
+    scale: 1,
+    offset: 0,
+    unit: '',
+    description: ''
+  });
+  
+  // 触发条件类型定义
+  const triggerConditionTypes = [
+    { id: 'gt', name: '大于 (>)', symbol: '>', category: 'compare' },
+    { id: 'lt', name: '小于 (<)', symbol: '<', category: 'compare' },
+    { id: 'eq', name: '等于 (==)', symbol: '==', category: 'compare' },
+    { id: 'ne', name: '不等于 (!=)', symbol: '!=', category: 'compare' },
+    { id: 'gte', name: '大于等于 (>=)', symbol: '>=', category: 'compare' },
+    { id: 'lte', name: '小于等于 (<=)', symbol: '<=', category: 'compare' },
+    { id: 'between', name: '在范围内', symbol: 'between', category: 'range' },
+    { id: 'outside', name: '超出范围', symbol: 'outside', category: 'range' },
+    { id: 'rising', name: '上升沿 (0→1)', symbol: 'rising', category: 'state' },
+    { id: 'falling', name: '下降沿 (1→0)', symbol: 'falling', category: 'state' },
+    { id: 'changed', name: '状态改变', symbol: 'changed', category: 'state' },
+    { id: 'duration', name: '持续超限N秒', symbol: 'duration', category: 'time' }
+  ];
   const [formData, setFormData] = useState({
     // 基础信息
     deviceCategory: '',
@@ -113,6 +145,111 @@ function DeviceModelWizard({ onNavigate }) {
       return customPointTable;
     }
     return samplePointTables[formData.selectedPointTable] || [];
+  };
+
+  // 点表CRUD函数
+  const handleOpenAddPoint = () => {
+    setPointForm({
+      name: '',
+      address: '',
+      type: 'uint16',
+      rw: 'R',
+      functionCode: '03',
+      byteOrder: 'big',
+      scale: 1,
+      offset: 0,
+      unit: '',
+      description: ''
+    });
+    setEditingPointIndex(-1);
+    setPointModalOpen(true);
+  };
+
+  const handleOpenEditPoint = (index) => {
+    const points = getCurrentPointTableData();
+    const point = points[index];
+    setPointForm({
+      name: point.name || '',
+      address: point.address || point.ioa || point.reference || point.nodeId || point.canId || point.dataId || '',
+      type: point.type || 'uint16',
+      rw: point.rw || 'R',
+      functionCode: point.functionCode || '03',
+      byteOrder: point.byteOrder || 'big',
+      scale: point.scale || 1,
+      offset: point.offset || 0,
+      unit: point.unit || '',
+      description: point.description || ''
+    });
+    setEditingPointIndex(index);
+    setPointModalOpen(true);
+  };
+
+  const handleSavePoint = () => {
+    if (!pointForm.name || !pointForm.address) {
+      alert('请填写点位名称和地址');
+      return;
+    }
+    
+    // 构建点位对象（根据协议类型设置地址字段）
+    const newPoint = {
+      name: pointForm.name,
+      type: pointForm.type,
+      rw: pointForm.rw,
+      functionCode: pointForm.functionCode,
+      byteOrder: pointForm.byteOrder,
+      scale: pointForm.scale,
+      offset: pointForm.offset,
+      unit: pointForm.unit,
+      description: pointForm.description
+    };
+    
+    // 根据协议类型设置正确的地址字段
+    if (formData.protocolType.startsWith('modbus')) {
+      newPoint.address = pointForm.address;
+    } else if (formData.protocolType === 'iec104') {
+      newPoint.ioa = pointForm.address;
+    } else if (formData.protocolType === 'iec61850') {
+      newPoint.reference = pointForm.address;
+    } else if (formData.protocolType === 'opc') {
+      newPoint.nodeId = pointForm.address;
+    } else if (formData.protocolType === 'can') {
+      newPoint.canId = pointForm.address;
+    } else if (formData.protocolType.startsWith('dlt645')) {
+      newPoint.dataId = pointForm.address;
+    } else {
+      newPoint.address = pointForm.address;
+    }
+    
+    // 确保使用自定义点表
+    if (formData.selectedPointTable !== 'custom') {
+      // 复制当前点表到自定义
+      const currentPoints = [...getCurrentPointTableData()];
+      setCustomPointTable(currentPoints);
+      updateFormData('selectedPointTable', 'custom');
+    }
+    
+    const updatedPoints = [...customPointTable];
+    if (editingPointIndex >= 0) {
+      updatedPoints[editingPointIndex] = newPoint;
+    } else {
+      updatedPoints.push(newPoint);
+    }
+    setCustomPointTable(updatedPoints);
+    setPointModalOpen(false);
+  };
+
+  const handleDeletePoint = (index) => {
+    if (!confirm('确定要删除此点位吗？')) return;
+    
+    // 确保使用自定义点表
+    if (formData.selectedPointTable !== 'custom') {
+      const currentPoints = [...getCurrentPointTableData()];
+      setCustomPointTable(currentPoints);
+      updateFormData('selectedPointTable', 'custom');
+    }
+    
+    const updatedPoints = customPointTable.filter((_, i) => i !== index);
+    setCustomPointTable(updatedPoints);
   };
 
   const updateFormData = (field, value) => {
@@ -1004,6 +1141,12 @@ function DeviceModelWizard({ onNavigate }) {
                 <div className="param-card-title">
                   <span>📋</span> 协议点表配置
                   <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
+                    <button 
+                      className="btn btn-sm btn-primary"
+                      onClick={handleOpenAddPoint}
+                    >
+                      ➕ 新增点位
+                    </button>
                     <input
                       type="file"
                       ref={pointTableFileRef}
@@ -1039,7 +1182,7 @@ function DeviceModelWizard({ onNavigate }) {
                   </div>
                 </div>
                 <div className="form-hint" style={{ marginBottom: '12px' }}>
-                  根据协议类型 <strong>{protocolTypes.find(p => p.id === formData.protocolType)?.name}</strong> 显示可用的点表模板
+                  根据协议类型 <strong>{protocolTypes.find(p => p.id === formData.protocolType)?.name}</strong> 显示可用的点表模板。可选择预设模板或手动新增/编辑点位。
                 </div>
                 <div className="form-group" style={{ marginBottom: '12px' }}>
                   <label className="form-label">选择点表模板</label>
@@ -1053,12 +1196,12 @@ function DeviceModelWizard({ onNavigate }) {
                       <option key={table.id} value={table.id}>{table.name}</option>
                     ))}
                     {customPointTable.length > 0 && (
-                      <option value="custom">自定义导入点表 ({customPointTable.length}个点位)</option>
+                      <option value="custom">自定义点表 ({customPointTable.length}个点位)</option>
                     )}
                   </select>
                 </div>
                 {formData.selectedPointTable && (
-                  <div className="point-table-selector" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  <div className="point-table-selector" style={{ maxHeight: '350px', overflowY: 'auto' }}>
                     {getCurrentPointTableData().length === 0 ? (
                       <div style={{ 
                         padding: '30px', 
@@ -1067,12 +1210,13 @@ function DeviceModelWizard({ onNavigate }) {
                         border: '1px dashed var(--gray-300)',
                         borderRadius: '8px'
                       }}>
-                        该点表暂无配置的点位
+                        该点表暂无配置的点位，点击"新增点位"添加
                       </div>
                     ) : (
                       <table style={{ width: '100%', fontSize: '12px' }}>
                         <thead>
                           <tr>
+                            <th style={{ width: '40px' }}>#</th>
                             {/* 根据协议类型显示不同的列 */}
                             {formData.protocolType.startsWith('modbus') && <th>地址</th>}
                             {formData.protocolType === 'iec61850' && <th>引用路径</th>}
@@ -1084,11 +1228,13 @@ function DeviceModelWizard({ onNavigate }) {
                             <th>数据类型</th>
                             <th>读写</th>
                             <th>说明</th>
+                            <th style={{ width: '100px' }}>操作</th>
                           </tr>
                         </thead>
                         <tbody>
                           {getCurrentPointTableData().map((point, index) => (
                             <tr key={index}>
+                              <td style={{ color: 'var(--gray-400)' }}>{index + 1}</td>
                               {/* 根据协议类型显示不同的地址/标识列 */}
                               {formData.protocolType.startsWith('modbus') && <td>{point.address}</td>}
                               {formData.protocolType === 'iec61850' && <td style={{ fontSize: '11px' }}>{point.reference}</td>}
@@ -1099,11 +1245,27 @@ function DeviceModelWizard({ onNavigate }) {
                               <td>{point.name}</td>
                               <td>{point.type}</td>
                               <td>
-                                <span className={`tag ${point.rw === 'R' ? 'tag-gray' : 'tag-blue'}`}>
+                                <span className={`tag ${point.rw === 'R' ? 'tag-gray' : point.rw === 'W' ? 'tag-orange' : 'tag-blue'}`}>
                                   {point.rw || '-'}
                                 </span>
                               </td>
-                              <td>{point.description}</td>
+                              <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{point.description}</td>
+                              <td>
+                                <button 
+                                  className="btn btn-sm btn-secondary" 
+                                  style={{ marginRight: '4px', padding: '2px 6px' }}
+                                  onClick={() => handleOpenEditPoint(index)}
+                                >
+                                  ✏️
+                                </button>
+                                <button 
+                                  className="btn btn-sm btn-danger" 
+                                  style={{ padding: '2px 6px' }}
+                                  onClick={() => handleDeletePoint(index)}
+                                >
+                                  🗑️
+                                </button>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1111,7 +1273,7 @@ function DeviceModelWizard({ onNavigate }) {
                     )}
                   </div>
                 )}
-                {getAvailablePointTables().length === 0 && !formData.selectedPointTable && (
+                {!formData.selectedPointTable && (
                   <div style={{ 
                     padding: '20px', 
                     textAlign: 'center', 
@@ -1119,7 +1281,7 @@ function DeviceModelWizard({ onNavigate }) {
                     border: '1px dashed var(--gray-300)',
                     borderRadius: '8px'
                   }}>
-                    当前协议暂无预设点表模板，请导入自定义点表
+                    请选择点表模板或点击"新增点位"开始配置
                   </div>
                 )}
               </div>
@@ -1139,7 +1301,30 @@ function DeviceModelWizard({ onNavigate }) {
               
               <div className="notice-banner info">
                 <span>💡</span>
-                <span>勾选需要的告警类型，默认阈值已填充，可直接复用或微调</span>
+                <span>配置告警规则：选择告警点（来自已配置的点表）→ 设置触发条件 → 设置告警级别</span>
+              </div>
+
+              {/* 支持的触发条件说明 */}
+              <div className="param-card" style={{ marginBottom: '16px' }}>
+                <div className="param-card-title">
+                  <span>📊</span> 支持的触发条件类型
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', fontSize: '12px' }}>
+                  {triggerConditionTypes.map(tc => (
+                    <div key={tc.id} style={{ 
+                      padding: '6px 10px', 
+                      background: tc.category === 'compare' ? 'var(--blue-50)' : 
+                                  tc.category === 'range' ? 'var(--green-50)' : 
+                                  tc.category === 'state' ? 'var(--yellow-50)' : 'var(--purple-50)',
+                      borderRadius: '4px',
+                      border: `1px solid ${tc.category === 'compare' ? 'var(--blue-200)' : 
+                              tc.category === 'range' ? 'var(--green-200)' : 
+                              tc.category === 'state' ? 'var(--yellow-200)' : 'var(--purple-200)'}`
+                    }}>
+                      <strong>{tc.symbol}</strong> {tc.name}
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div style={{ marginBottom: '16px' }}>
@@ -1172,6 +1357,11 @@ function DeviceModelWizard({ onNavigate }) {
                           <span className={`tag tag-${rule.level === 'critical' ? 'red' : rule.level === 'error' ? 'red' : rule.level === 'warning' ? 'yellow' : 'blue'}`}>
                             {alarmLevels.find(l => l.id === rule.level)?.name || rule.level}
                           </span>
+                          {rule.sourcePoint && (
+                            <span className="tag tag-gray" style={{ fontSize: '11px' }}>
+                              📍 {rule.sourcePoint}
+                            </span>
+                          )}
                         </div>
                         <button 
                           className="btn btn-sm btn-danger"
@@ -1205,9 +1395,67 @@ function DeviceModelWizard({ onNavigate }) {
                             </select>
                           </div>
                         </div>
+                        
+                        {/* 从点表选择告警点 */}
+                        <div className="form-group">
+                          <label className="form-label">选择告警点 (从已配置点表选择)</label>
+                          <select
+                            className="form-select"
+                            value={rule.sourcePoint || ''}
+                            onChange={(e) => handleUpdateAlarmRule(index, 'sourcePoint', e.target.value)}
+                          >
+                            <option value="">请选择告警点...</option>
+                            {getCurrentPointTableData().length > 0 ? (
+                              getCurrentPointTableData().map((point, pIndex) => (
+                                <option key={pIndex} value={point.name}>
+                                  {point.name} ({point.type}) - {point.description || '无描述'}
+                                </option>
+                              ))
+                            ) : (
+                              <option disabled>请先在协议&通道步骤中配置点表</option>
+                            )}
+                          </select>
+                          {getCurrentPointTableData().length === 0 && (
+                            <div className="form-hint" style={{ color: 'var(--orange-500)' }}>
+                              ⚠️ 请先在"协议&通道"步骤中配置点表，才能选择告警点
+                            </div>
+                          )}
+                        </div>
+
                         <div className="form-row">
                           <div className="form-group">
-                            <label className="form-label">触发阈值</label>
+                            <label className="form-label">触发条件类型</label>
+                            <select
+                              className="form-select"
+                              value={rule.conditionType || 'gt'}
+                              onChange={(e) => handleUpdateAlarmRule(index, 'conditionType', e.target.value)}
+                            >
+                              <optgroup label="比较运算">
+                                {triggerConditionTypes.filter(t => t.category === 'compare').map(tc => (
+                                  <option key={tc.id} value={tc.id}>{tc.symbol} {tc.name}</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="范围判断">
+                                {triggerConditionTypes.filter(t => t.category === 'range').map(tc => (
+                                  <option key={tc.id} value={tc.id}>{tc.symbol} {tc.name}</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="状态变化">
+                                {triggerConditionTypes.filter(t => t.category === 'state').map(tc => (
+                                  <option key={tc.id} value={tc.id}>{tc.symbol} {tc.name}</option>
+                                ))}
+                              </optgroup>
+                              <optgroup label="时间条件">
+                                {triggerConditionTypes.filter(t => t.category === 'time').map(tc => (
+                                  <option key={tc.id} value={tc.id}>{tc.symbol} {tc.name}</option>
+                                ))}
+                              </optgroup>
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">
+                              {rule.conditionType === 'between' || rule.conditionType === 'outside' ? '下限值' : '阈值'}
+                            </label>
                             <div style={{ display: 'flex', gap: '8px' }}>
                               <input
                                 type="number"
@@ -1225,17 +1473,76 @@ function DeviceModelWizard({ onNavigate }) {
                               />
                             </div>
                           </div>
-                          <div className="form-group">
-                            <label className="form-label">触发条件</label>
-                            <input
-                              type="text"
-                              className="form-input"
-                              value={rule.condition}
-                              onChange={(e) => handleUpdateAlarmRule(index, 'condition', e.target.value)}
-                              placeholder="如：voltage > threshold"
-                            />
-                          </div>
                         </div>
+                        
+                        {/* 范围类型的上限值 */}
+                        {(rule.conditionType === 'between' || rule.conditionType === 'outside') && (
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label className="form-label">上限值</label>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={rule.thresholdHigh || 0}
+                                onChange={(e) => handleUpdateAlarmRule(index, 'thresholdHigh', Number(e.target.value))}
+                              />
+                            </div>
+                            <div className="form-group">
+                              <div className="form-hint" style={{ marginTop: '28px' }}>
+                                当值 {rule.conditionType === 'between' ? '在' : '超出'} {rule.threshold || 0} ~ {rule.thresholdHigh || 0} {rule.unit || ''} 范围{rule.conditionType === 'between' ? '内' : '外'}时触发
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* 持续时间条件 */}
+                        {rule.conditionType === 'duration' && (
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label className="form-label">持续时间 (秒)</label>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={rule.duration || 10}
+                                onChange={(e) => handleUpdateAlarmRule(index, 'duration', Number(e.target.value))}
+                                min="1"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <div className="form-hint" style={{ marginTop: '28px' }}>
+                                当值超过阈值持续 {rule.duration || 10} 秒后触发告警
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="form-row">
+                          <div className="form-group">
+                            <label className="form-label">恢复条件</label>
+                            <select
+                              className="form-select"
+                              value={rule.recoveryMode || 'auto'}
+                              onChange={(e) => handleUpdateAlarmRule(index, 'recoveryMode', e.target.value)}
+                            >
+                              <option value="auto">自动恢复（值恢复正常后自动消除）</option>
+                              <option value="manual">手动确认（需人工确认后消除）</option>
+                              <option value="delay">延迟恢复（值恢复正常后延迟N秒消除）</option>
+                            </select>
+                          </div>
+                          {rule.recoveryMode === 'delay' && (
+                            <div className="form-group">
+                              <label className="form-label">恢复延迟 (秒)</label>
+                              <input
+                                type="number"
+                                className="form-input"
+                                value={rule.recoveryDelay || 30}
+                                onChange={(e) => handleUpdateAlarmRule(index, 'recoveryDelay', Number(e.target.value))}
+                                min="1"
+                              />
+                            </div>
+                          )}
+                        </div>
+                        
                         <div className="form-group">
                           <label className="form-label">通知方式</label>
                           <div className="checkbox-group">
@@ -1426,6 +1733,188 @@ function DeviceModelWizard({ onNavigate }) {
             </div>
           )}
         </div>
+
+        {/* 点表编辑模态框 */}
+        {pointModalOpen && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000
+          }}>
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '24px',
+              width: '600px',
+              maxHeight: '80vh',
+              overflowY: 'auto'
+            }}>
+              <h3 style={{ marginBottom: '20px' }}>
+                {editingPointIndex >= 0 ? '✏️ 编辑点位' : '➕ 新增点位'}
+              </h3>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">点位名称 *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={pointForm.name}
+                    onChange={(e) => setPointForm({...pointForm, name: e.target.value})}
+                    placeholder="如：电池SOC"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">
+                    {formData.protocolType.startsWith('modbus') ? '寄存器地址' :
+                     formData.protocolType === 'iec104' ? 'IOA地址' :
+                     formData.protocolType === 'iec61850' ? '引用路径' :
+                     formData.protocolType === 'opc' ? '节点ID' :
+                     formData.protocolType === 'can' ? 'CAN ID' :
+                     formData.protocolType.startsWith('dlt645') ? '数据标识' : '地址'} *
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={pointForm.address}
+                    onChange={(e) => setPointForm({...pointForm, address: e.target.value})}
+                    placeholder={formData.protocolType.startsWith('modbus') ? '如：40001' : '如：1001'}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">数据类型</label>
+                  <select
+                    className="form-select"
+                    value={pointForm.type}
+                    onChange={(e) => setPointForm({...pointForm, type: e.target.value})}
+                  >
+                    <option value="bool">布尔 (bool)</option>
+                    <option value="int16">有符号16位 (int16)</option>
+                    <option value="uint16">无符号16位 (uint16)</option>
+                    <option value="int32">有符号32位 (int32)</option>
+                    <option value="uint32">无符号32位 (uint32)</option>
+                    <option value="float">单精度浮点 (float)</option>
+                    <option value="double">双精度浮点 (double)</option>
+                    <option value="string">字符串 (string)</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">读写权限</label>
+                  <select
+                    className="form-select"
+                    value={pointForm.rw}
+                    onChange={(e) => setPointForm({...pointForm, rw: e.target.value})}
+                  >
+                    <option value="R">只读 (R)</option>
+                    <option value="W">只写 (W)</option>
+                    <option value="RW">读写 (RW)</option>
+                  </select>
+                </div>
+              </div>
+
+              {formData.protocolType.startsWith('modbus') && (
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">功能码</label>
+                    <select
+                      className="form-select"
+                      value={pointForm.functionCode}
+                      onChange={(e) => setPointForm({...pointForm, functionCode: e.target.value})}
+                    >
+                      <option value="01">01 - 读线圈</option>
+                      <option value="02">02 - 读离散输入</option>
+                      <option value="03">03 - 读保持寄存器</option>
+                      <option value="04">04 - 读输入寄存器</option>
+                      <option value="05">05 - 写单个线圈</option>
+                      <option value="06">06 - 写单个寄存器</option>
+                      <option value="15">15 - 写多个线圈</option>
+                      <option value="16">16 - 写多个寄存器</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">字节序</label>
+                    <select
+                      className="form-select"
+                      value={pointForm.byteOrder}
+                      onChange={(e) => setPointForm({...pointForm, byteOrder: e.target.value})}
+                    >
+                      <option value="big">大端 (Big Endian)</option>
+                      <option value="little">小端 (Little Endian)</option>
+                      <option value="big_swap">大端交换 (Big Swap)</option>
+                      <option value="little_swap">小端交换 (Little Swap)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">倍率 (Scale)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={pointForm.scale}
+                    onChange={(e) => setPointForm({...pointForm, scale: parseFloat(e.target.value) || 1})}
+                    step="0.001"
+                  />
+                  <div className="form-hint">实际值 = 原始值 × 倍率 + 偏移</div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">偏移 (Offset)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={pointForm.offset}
+                    onChange={(e) => setPointForm({...pointForm, offset: parseFloat(e.target.value) || 0})}
+                    step="0.001"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">单位</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={pointForm.unit}
+                    onChange={(e) => setPointForm({...pointForm, unit: e.target.value})}
+                    placeholder="如：kW、V、A、%"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">描述说明</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={pointForm.description}
+                    onChange={(e) => setPointForm({...pointForm, description: e.target.value})}
+                    placeholder="点位功能描述"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end', marginTop: '20px' }}>
+                <button className="btn btn-secondary" onClick={() => setPointModalOpen(false)}>
+                  取消
+                </button>
+                <button className="btn btn-primary" onClick={handleSavePoint}>
+                  {editingPointIndex >= 0 ? '保存修改' : '添加点位'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 底部按钮 */}
         <div className="wizard-footer">
