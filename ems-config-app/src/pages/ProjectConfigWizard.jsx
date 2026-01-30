@@ -1863,63 +1863,66 @@ function ProjectConfigWizard({ onNavigate }) {
                                           </div>
                                         </div>
 
-                                        {/* 业务参数配置 */}
-                                        <div>
-                                          <h5 style={{ 
-                                            margin: '0 0 12px 0', 
-                                            color: 'var(--gray-700)',
-                                            fontSize: '14px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px'
-                                          }}>
-                                            <span>⚙️</span> 业务参数配置
-                                          </h5>
-                                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>设备别名</label>
-                                              <input
-                                                type="text"
-                                                className="form-input"
-                                                placeholder="输入设备别名"
-                                                value={params.alias || ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'alias', e.target.value)}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>安装位置</label>
-                                              <input
-                                                type="text"
-                                                className="form-input"
-                                                placeholder="如: 1#配电室"
-                                                value={params.location || ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'location', e.target.value)}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>采集优先级</label>
-                                              <select
-                                                className="form-select"
-                                                value={params.priority || 'normal'}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'priority', e.target.value)}
-                                              >
-                                                <option value="high">高优先级</option>
-                                                <option value="normal">普通</option>
-                                                <option value="low">低优先级</option>
-                                              </select>
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>启用状态</label>
-                                              <select
-                                                className="form-select"
-                                                value={params.enabled !== false ? 'true' : 'false'}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'enabled', e.target.value === 'true')}
-                                              >
-                                                <option value="true">启用</option>
-                                                <option value="false">禁用</option>
-                                              </select>
-                                            </div>
+                                        {/* 启用状态（来自物模型的配置项） */}
+                                        <div style={{ 
+                                          display: 'flex', 
+                                          alignItems: 'center', 
+                                          justifyContent: 'space-between',
+                                          padding: '12px 16px',
+                                          background: 'var(--gray-50)',
+                                          borderRadius: '8px',
+                                          marginTop: '8px'
+                                        }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                            <span>⚙️</span>
+                                            <span style={{ fontWeight: '500', color: 'var(--gray-700)' }}>设备启用状态</span>
                                           </div>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                            <label style={{ 
+                                              display: 'flex', 
+                                              alignItems: 'center', 
+                                              gap: '6px', 
+                                              cursor: 'pointer' 
+                                            }}>
+                                              <input
+                                                type="radio"
+                                                name={`enabled-${device.instanceId}`}
+                                                checked={params.enabled !== false}
+                                                onChange={() => updateDeviceParam(device.instanceId, 'enabled', true)}
+                                              />
+                                              <span style={{ color: '#2e7d32' }}>✓ 启用</span>
+                                            </label>
+                                            <label style={{ 
+                                              display: 'flex', 
+                                              alignItems: 'center', 
+                                              gap: '6px', 
+                                              cursor: 'pointer' 
+                                            }}>
+                                              <input
+                                                type="radio"
+                                                name={`enabled-${device.instanceId}`}
+                                                checked={params.enabled === false}
+                                                onChange={() => updateDeviceParam(device.instanceId, 'enabled', false)}
+                                              />
+                                              <span style={{ color: '#c62828' }}>✗ 禁用</span>
+                                            </label>
+                                          </div>
+                                        </div>
+
+                                        {/* 物模型配置信息提示 */}
+                                        <div style={{
+                                          marginTop: '12px',
+                                          padding: '10px 12px',
+                                          background: '#e3f2fd',
+                                          borderRadius: '6px',
+                                          fontSize: '12px',
+                                          color: '#1565c0',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          gap: '8px'
+                                        }}>
+                                          <span>💡</span>
+                                          <span>以上参数默认值来自物模型配置，微调后的参数将用于当前项目</span>
                                         </div>
                                       </div>
                                     )}
@@ -2146,37 +2149,148 @@ function ProjectConfigWizard({ onNavigate }) {
               {algorithmTab === 'mode' && (
                 <div>
                   <h4 style={{ marginBottom: '16px', color: 'var(--gray-700)' }}>调度模式选择</h4>
+                  <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '20px' }}>
+                    选择调度模式后，系统将自动设置相应的目标权重（可在"目标权重"Tab中查看和调整）
+                  </p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
-                    {schedulingModes.map(mode => (
-                      <div
-                        key={mode.id}
-                        onClick={() => setAlgorithmConfig(prev => ({ ...prev, schedulingMode: mode.id }))}
-                        style={{
-                          padding: '24px',
-                          borderRadius: '12px',
-                          border: algorithmConfig.schedulingMode === mode.id 
-                            ? '2px solid var(--primary)' 
-                            : '1px solid var(--gray-200)',
-                          background: algorithmConfig.schedulingMode === mode.id 
-                            ? 'var(--primary-light)' 
-                            : 'white',
-                          cursor: 'pointer',
-                          textAlign: 'center',
-                          transition: 'all 0.2s'
-                        }}
-                      >
-                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>{mode.icon}</div>
-                        <div style={{ 
-                          fontWeight: '600',
-                          color: algorithmConfig.schedulingMode === mode.id ? 'var(--primary)' : 'var(--gray-800)'
-                        }}>
-                          {mode.name}
+                    {schedulingModes.map(mode => {
+                      const isSelected = algorithmConfig.schedulingMode === mode.id;
+                      // 定义各模式对应的权重
+                      const modeWeights = {
+                        economic: { economic: 60, lifespan: 20, socBalance: 10, curtailmentMin: 10 },
+                        lifespan: { economic: 20, lifespan: 60, socBalance: 10, curtailmentMin: 10 },
+                        balanced: { economic: 25, lifespan: 25, socBalance: 25, curtailmentMin: 25 },
+                        custom: null // 自定义不自动设置
+                      };
+                      
+                      return (
+                        <div
+                          key={mode.id}
+                          onClick={() => {
+                            const weights = modeWeights[mode.id];
+                            setAlgorithmConfig(prev => ({
+                              ...prev,
+                              schedulingMode: mode.id,
+                              // 如果不是自定义模式，自动设置权重
+                              ...(weights ? { weights } : {})
+                            }));
+                          }}
+                          style={{
+                            padding: '24px',
+                            borderRadius: '12px',
+                            border: isSelected 
+                              ? '3px solid var(--primary)' 
+                              : '1px solid var(--gray-200)',
+                            background: isSelected 
+                              ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' 
+                              : 'white',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.2s',
+                            transform: isSelected ? 'scale(1.03)' : 'scale(1)',
+                            boxShadow: isSelected ? '0 4px 12px rgba(76, 175, 80, 0.3)' : 'none',
+                            position: 'relative'
+                          }}
+                        >
+                          {/* 选中勾选图标 */}
+                          {isSelected && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '8px',
+                              right: '8px',
+                              width: '24px',
+                              height: '24px',
+                              borderRadius: '50%',
+                              background: '#4caf50',
+                              color: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '14px',
+                              fontWeight: 'bold'
+                            }}>
+                              ✓
+                            </div>
+                          )}
+                          <div style={{ fontSize: '36px', marginBottom: '12px' }}>{mode.icon}</div>
+                          <div style={{ 
+                            fontWeight: '600',
+                            color: isSelected ? '#2e7d32' : 'var(--gray-800)',
+                            fontSize: '16px'
+                          }}>
+                            {mode.name}
+                          </div>
+                          <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginTop: '4px' }}>
+                            {mode.description}
+                          </div>
+                          {/* 权重预览 */}
+                          {modeWeights[mode.id] && (
+                            <div style={{ 
+                              marginTop: '12px', 
+                              padding: '8px', 
+                              background: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--gray-50)', 
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              color: 'var(--gray-600)'
+                            }}>
+                              经济{modeWeights[mode.id].economic}% · 
+                              寿命{modeWeights[mode.id].lifespan}% · 
+                              SOC{modeWeights[mode.id].socBalance}%
+                            </div>
+                          )}
+                          {mode.id === 'custom' && (
+                            <div style={{ 
+                              marginTop: '12px', 
+                              padding: '8px', 
+                              background: isSelected ? 'rgba(255,255,255,0.8)' : 'var(--gray-50)', 
+                              borderRadius: '6px',
+                              fontSize: '11px',
+                              color: 'var(--gray-600)'
+                            }}>
+                              手动调整各项权重
+                            </div>
+                          )}
                         </div>
-                        <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginTop: '4px' }}>
-                          {mode.description}
-                        </div>
+                      );
+                    })}
+                  </div>
+                  
+                  {/* 当前权重显示 */}
+                  <div style={{
+                    marginTop: '24px',
+                    padding: '16px',
+                    background: '#f8f9fa',
+                    borderRadius: '8px',
+                    border: '1px solid var(--gray-200)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                      <h5 style={{ margin: 0, color: 'var(--gray-700)', fontSize: '14px' }}>当前权重配置</h5>
+                      <span style={{ 
+                        fontSize: '12px', 
+                        color: algorithmConfig.schedulingMode === 'custom' ? '#1976d2' : '#2e7d32',
+                        fontWeight: '500'
+                      }}>
+                        {schedulingModes.find(m => m.id === algorithmConfig.schedulingMode)?.name || '未选择'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', gap: '16px' }}>
+                      <div style={{ flex: 1, padding: '10px', background: '#e8f5e9', borderRadius: '6px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '600', color: '#2e7d32' }}>{algorithmConfig.weights.economic}%</div>
+                        <div style={{ fontSize: '11px', color: '#388e3c' }}>经济性</div>
                       </div>
-                    ))}
+                      <div style={{ flex: 1, padding: '10px', background: '#e3f2fd', borderRadius: '6px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '600', color: '#1565c0' }}>{algorithmConfig.weights.lifespan}%</div>
+                        <div style={{ fontSize: '11px', color: '#1976d2' }}>寿命</div>
+                      </div>
+                      <div style={{ flex: 1, padding: '10px', background: '#f3e5f5', borderRadius: '6px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '600', color: '#7b1fa2' }}>{algorithmConfig.weights.socBalance}%</div>
+                        <div style={{ fontSize: '11px', color: '#8e24aa' }}>SOC协同</div>
+                      </div>
+                      <div style={{ flex: 1, padding: '10px', background: '#fff3e0', borderRadius: '6px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '20px', fontWeight: '600', color: '#e65100' }}>{algorithmConfig.weights.curtailmentMin}%</div>
+                        <div style={{ fontSize: '11px', color: '#f57c00' }}>弃电最小化</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2252,6 +2366,33 @@ function ProjectConfigWizard({ onNavigate }) {
               {/* 峰谷/需量Tab - 新增 */}
               {algorithmTab === 'peakValley' && (
                 <div>
+                  {/* 策略关系说明 */}
+                  <div style={{
+                    marginBottom: '24px',
+                    padding: '16px',
+                    background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+                    borderRadius: '12px',
+                    border: '1px solid #90caf9'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                      <span style={{ fontSize: '24px' }}>💡</span>
+                      <div>
+                        <div style={{ fontWeight: '600', color: '#1565c0', marginBottom: '8px' }}>峰谷/需量与高级策略的关系</div>
+                        <div style={{ fontSize: '13px', color: '#1976d2', lineHeight: '1.6' }}>
+                          <div style={{ marginBottom: '6px' }}>
+                            <strong>• 峰谷电价策略：</strong>根据电价时段差异进行充放电调度，谷时充电、峰时放电，降低用电成本
+                          </div>
+                          <div style={{ marginBottom: '6px' }}>
+                            <strong>• 需量控制策略：</strong>在用电高峰时段通过储能放电限制需量，避免需量超限产生高额容量电费
+                          </div>
+                          <div>
+                            <strong>• 高级策略：</strong>定义整体调度框架参数（调度周期、预测窗口等），与上述策略配合使用
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* 削峰填谷配置 */}
                   <div style={{ marginBottom: '24px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
