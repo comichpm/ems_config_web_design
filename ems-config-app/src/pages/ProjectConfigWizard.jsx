@@ -12,18 +12,103 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 import {
   deviceCategories,
-  protocolTypes,
-  northboundProtocols,
   algorithmDefaults
 } from '../data/deviceTypes';
 
+// 新的6步引导流程
 const STEPS = [
-  { id: 1, name: '工程信息' },
-  { id: 2, name: '设备选择' },
-  { id: 3, name: '参数微调' },
+  { id: 1, name: '项目信息' },
+  { id: 2, name: '场景模板' },
+  { id: 3, name: '设备实例' },
   { id: 4, name: '电气拓扑' },
   { id: 5, name: '算法策略' },
-  { id: 6, name: '北向配置' }
+  { id: 6, name: '告警规则' }
+];
+
+// 场景模板定义
+const sceneTemplates = [
+  {
+    id: 'commercial_storage',
+    name: '并网工商业储能',
+    icon: '🏭',
+    description: '适用于工厂、商业建筑的储能系统，实现削峰填谷、需量管理',
+    devices: ['PCS储能变流器', '电池簇', 'BMS电池管理', '电表'],
+    extraDevices: 1,
+    recommendedAlgorithm: 'economic'
+  },
+  {
+    id: 'pv_storage_charger',
+    name: '光储充一体化',
+    icon: '☀️',
+    description: '适用于充电站，光伏自发自用、储能调峰',
+    devices: ['光伏逆变器', '光伏组串', 'PCS储能变流器', '电池簇'],
+    extraDevices: 2,
+    recommendedAlgorithm: 'balanced'
+  },
+  {
+    id: 'wind_pv_storage',
+    name: '风光储微网',
+    icon: '🌬️',
+    description: '适用于园区、海岛，多能互补、支持离网运行',
+    devices: ['风机', '风机变流器', '光伏逆变器', 'PCS储能变流器'],
+    extraDevices: 2,
+    recommendedAlgorithm: 'balanced'
+  },
+  {
+    id: 'diesel_storage',
+    name: '柴储混合',
+    icon: '🚛',
+    description: '适用于偏远地区，柴油机优化、储能平滑',
+    devices: ['柴油机组', 'ATS切换开关', 'PCS储能变流器', '电池簇'],
+    extraDevices: 0,
+    recommendedAlgorithm: 'lifespan'
+  },
+  {
+    id: 'custom',
+    name: '自定义配置',
+    icon: '⚙️',
+    description: '完全自定义的配置方案',
+    devices: [],
+    extraDevices: 0,
+    recommendedAlgorithm: 'custom'
+  }
+];
+
+// 系统类型
+const systemTypes = [
+  { id: 'grid_connected', name: '并网系统', description: '与电网连接运行' },
+  { id: 'off_grid', name: '离网系统', description: '独立运行不并网' },
+  { id: 'hybrid', name: '混合系统', description: '支持并网和离网' }
+];
+
+// 调度模式
+const schedulingModes = [
+  { id: 'economic', name: '经济优先', icon: '💰', description: '最小化电费成本' },
+  { id: 'lifespan', name: '寿命优先', icon: '🔋', description: '保护储能寿命' },
+  { id: 'balanced', name: '均衡模式', icon: '⚖️', description: '平衡各项指标' },
+  { id: 'custom', name: '自定义', icon: '⚙️', description: '自定义权重' }
+];
+
+// 告警等级
+const alarmLevels = [
+  { id: 'critical', name: '紧急', color: '#dc2626' },
+  { id: 'major', name: '重要', color: '#f97316' },
+  { id: 'minor', name: '次要', color: '#eab308' },
+  { id: 'warning', name: '提示', color: '#3b82f6' }
+];
+
+// 预设告警规则
+const presetAlarmRules = [
+  { id: 'soc_low', name: 'SOC过低告警', condition: 'SOC < 10%', level: 'critical', enabled: true },
+  { id: 'soc_high', name: 'SOC过高告警', condition: 'SOC > 95%', level: 'major', enabled: true },
+  { id: 'temp_high', name: '电池温度过高', condition: '温度 > 55℃', level: 'critical', enabled: true },
+  { id: 'temp_low', name: '电池温度过低', condition: '温度 < 0℃', level: 'major', enabled: true },
+  { id: 'voltage_high', name: '电压过高', condition: '电压 > 上限', level: 'major', enabled: true },
+  { id: 'voltage_low', name: '电压过低', condition: '电压 < 下限', level: 'major', enabled: true },
+  { id: 'current_high', name: '电流过大', condition: '电流 > 额定', level: 'major', enabled: true },
+  { id: 'comm_fail', name: '通讯中断', condition: '超时无响应', level: 'critical', enabled: true },
+  { id: 'pcs_fault', name: 'PCS故障', condition: '故障码 ≠ 0', level: 'critical', enabled: true },
+  { id: 'bms_fault', name: 'BMS故障', condition: '故障码 ≠ 0', level: 'critical', enabled: true }
 ];
 
 // 自定义节点样式
@@ -37,127 +122,115 @@ const nodeStyles = {
   grid: { background: '#fee2e2', borderColor: '#ef4444' }
 };
 
+// Helper function to convert hex color to rgba with opacity
+const hexToRgba = (hex, alpha = 1) => {
+  if (!hex) return 'rgba(59, 130, 246, 0.1)'; // default blue with transparency
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
 function ProjectConfigWizard({ onNavigate }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [completed, setCompleted] = useState(false);
   const [validationResults, setValidationResults] = useState([]);
   const fileInputRef = useRef(null);
-  const northboundFileInputRef = useRef(null);
   
-  // 工程信息
+  // 步骤1: 项目基础信息 - 增强版
   const [projectInfo, setProjectInfo] = useState({
     name: '',
     location: '',
+    systemType: 'grid_connected',
+    ratedCapacity: 1000, // kWh
+    ratedPower: 500, // kW
     manager: '',
     contact: '',
     description: ''
   });
 
-  // 选中的设备和物模型
+  // 步骤2: 场景模板
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+
+  // 步骤3: 选中的设备和物模型
   const [selectedDevices, setSelectedDevices] = useState([]);
   const [deviceModels, setDeviceModels] = useState([]);
   
   // 设备参数微调
   const [deviceParams, setDeviceParams] = useState({});
 
-  // 拓扑节点和边
+  // 步骤4: 拓扑节点和边
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-
-  // 拓扑全屏模式
   const [isTopologyFullscreen, setIsTopologyFullscreen] = useState(false);
 
-  // 算法策略配置 - 增强版
+  // 步骤5: 算法策略配置 - 全新Tab式设计
+  const [algorithmTab, setAlgorithmTab] = useState('mode'); // mode, weight, constraint, advanced
   const [algorithmConfig, setAlgorithmConfig] = useState({
-    ...algorithmDefaults,
-    // 逆功率保护
-    reversePowerProtection: {
-      enabled: false,
-      threshold: 10, // kW
-      actionDelay: 5, // 秒
-      protectMode: 'cutoff' // cutoff/reduce
+    // 调度模式
+    schedulingMode: 'economic',
+    // 目标权重 (总和应为100%)
+    weights: {
+      economic: 40,
+      lifespan: 30,
+      socBalance: 20,
+      curtailmentMin: 10
     },
-    // 风电接入策略
-    windIntegration: {
-      enabled: false,
-      priorityLevel: 1,
-      maxPowerLimit: 1000, // kW
-      rampRate: 50, // kW/min
-      curtailmentEnabled: true
+    // 约束参数
+    constraints: {
+      powerBalanceTolerance: 5, // kW
+      targetSoc: 60, // %
+      gridPowerLimit: 1000, // kW
+      socChargeMin: 20, // %
+      socDischargeMax: 90, // %
+      socCoefficient: 0.5
     },
-    // 光伏接入策略
-    solarIntegration: {
-      enabled: false,
-      priorityLevel: 2,
-      maxPowerLimit: 500, // kW
-      mpptOptimization: true,
-      antiBackflow: true
+    // 高级策略
+    advanced: {
+      schedulingPeriod: 15, // 分钟
+      predictionHorizon: 24, // 小时
+      safetyMargin: 5, // %
+      smoothingFactor: 0.8,
+      antiReversePower: true,
+      antiReversePowerThreshold: 10, // kW
+      gridPeakShaving: true,
+      loadFollowing: true
     },
-    // 柴发接入策略
-    dieselIntegration: {
-      enabled: false,
-      startSocThreshold: 15, // %
-      stopSocThreshold: 80, // %
-      minRunTime: 30, // 分钟
-      cooldownTime: 10 // 分钟
+    // 削峰填谷 (保留兼容)
+    peakShaving: algorithmDefaults?.peakShaving || {
+      enabled: true,
+      peakPeriods: [
+        { name: '早高峰', startTime: '08:00', endTime: '12:00', action: 'discharge', maxPower: 200 },
+        { name: '晚高峰', startTime: '18:00', endTime: '22:00', action: 'discharge', maxPower: 200 }
+      ],
+      valleyPeriods: [
+        { name: '夜间低谷', startTime: '23:00', endTime: '07:00', action: 'charge', maxPower: 200 }
+      ]
     },
-    // 充电桩接入策略
-    chargerIntegration: {
-      enabled: false,
-      maxTotalPower: 300, // kW
-      loadBalancing: true,
-      schedulingEnabled: true,
-      peakShiftEnabled: true
-    }
+    demandControl: algorithmDefaults?.demandControl || { enabled: false, demandLimit: 800 },
+    socManagement: algorithmDefaults?.socManagement || { minSoc: 10, maxSoc: 95, targetSoc: 60 }
   });
 
-  // 北向配置 - 增强版
-  const [northboundConfig, setNorthboundConfig] = useState({
-    enabled: false,
-    protocol: 'mqtt',
-    serverIp: '',
-    serverPort: 1883,
-    topic: 'ems/data',
-    username: '',
-    password: '',
-    clientId: 'ems_client_001',
-    keepAlive: 60,
-    qos: 1,
-    publishInterval: 5000,
-    // 增强配置
-    heartbeatInterval: 30,
-    reconnectInterval: 5000,
-    maxReconnectAttempts: 10,
-    dataFormat: 'json',
-    compression: false,
-    encryption: false,
-    // IEC104特定配置
-    iec104Config: {
-      originatorAddress: 0,
-      commonAddress: 1,
-      k: 12,
-      w: 8,
-      t0: 30,
-      t1: 15,
-      t2: 10,
-      t3: 20
-    },
-    // Modbus服务端配置
-    modbusServerConfig: {
-      unitId: 1,
-      maxConnections: 5
-    },
-    // HTTP配置
-    httpConfig: {
-      method: 'POST',
-      contentType: 'application/json',
-      authType: 'none', // none/basic/bearer
-      authToken: ''
-    },
-    // 点表配置
-    pointTableEnabled: true,
-    pointTableMapping: []
+  // 步骤6: 告警规则配置
+  const [alarmRules, setAlarmRules] = useState(presetAlarmRules);
+  const [showAddAlarmModal, setShowAddAlarmModal] = useState(false);
+  const [newAlarmRule, setNewAlarmRule] = useState({
+    name: '',
+    condition: '',
+    level: 'warning',
+    enabled: true
   });
+
+  // ESC key handler for modal
+  useEffect(() => {
+    const handleEsc = (e) => {
+      if (e.key === 'Escape' && showAddAlarmModal) {
+        setShowAddAlarmModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [showAddAlarmModal]);
 
   // 加载已保存的物模型
   useEffect(() => {
@@ -174,6 +247,18 @@ function ProjectConfigWizard({ onNavigate }) {
     setProjectInfo(prev => ({ ...prev, [field]: value }));
   };
 
+  // 选择场景模板后自动推荐设备
+  const handleSelectTemplate = (template) => {
+    setSelectedTemplate(template);
+    // 根据模板推荐算法模式
+    if (template.recommendedAlgorithm) {
+      setAlgorithmConfig(prev => ({
+        ...prev,
+        schedulingMode: template.recommendedAlgorithm
+      }));
+    }
+  };
+
   // 添加单个设备实例
   const handleAddDevice = (model) => {
     const existingCount = selectedDevices.filter(d => d.id === model.id).length;
@@ -185,7 +270,6 @@ function ProjectConfigWizard({ onNavigate }) {
     };
     setSelectedDevices(prev => [...prev, newDevice]);
     
-    // 初始化设备参数 - 增强版
     const ipLastOctet = Math.min(100 + existingCount, 254);
     setDeviceParams(prev => ({
       ...prev,
@@ -193,7 +277,6 @@ function ProjectConfigWizard({ onNavigate }) {
         slaveAddress: existingCount + 1,
         port: `COM${(existingCount % 10) + 1}`,
         ip: `192.168.1.${ipLastOctet}`,
-        // 增强参数
         timeout: 3000,
         retries: 3,
         pollInterval: 1000,
@@ -246,12 +329,10 @@ function ProjectConfigWizard({ onNavigate }) {
       delete newParams[instanceId];
       return newParams;
     });
-    // 从拓扑中移除节点
     setNodes(prev => prev.filter(n => n.id !== instanceId));
     setEdges(prev => prev.filter(e => e.source !== instanceId && e.target !== instanceId));
   };
 
-  // 删除拓扑中的设备节点
   const handleDeleteTopologyNode = (nodeId) => {
     setNodes(prev => prev.filter(n => n.id !== nodeId));
     setEdges(prev => prev.filter(e => e.source !== nodeId && e.target !== nodeId));
@@ -330,7 +411,6 @@ function ProjectConfigWizard({ onNavigate }) {
   );
 
   const handleAutoLayout = () => {
-    // 简单的自动布局算法
     const spacing = { x: 180, y: 120 };
     const startPos = { x: 50, y: 50 };
     const columns = 4;
@@ -344,6 +424,31 @@ function ProjectConfigWizard({ onNavigate }) {
     }));
 
     setNodes(newNodes);
+  };
+
+  // 添加告警规则
+  const handleAddAlarmRule = () => {
+    if (newAlarmRule.name && newAlarmRule.condition) {
+      const rule = {
+        ...newAlarmRule,
+        id: `custom_${Date.now()}`
+      };
+      setAlarmRules(prev => [...prev, rule]);
+      setNewAlarmRule({ name: '', condition: '', level: 'warning', enabled: true });
+      setShowAddAlarmModal(false);
+    }
+  };
+
+  // 删除告警规则
+  const handleDeleteAlarmRule = (ruleId) => {
+    setAlarmRules(prev => prev.filter(r => r.id !== ruleId));
+  };
+
+  // 切换告警规则启用状态
+  const handleToggleAlarmRule = (ruleId) => {
+    setAlarmRules(prev => prev.map(r => 
+      r.id === ruleId ? { ...r, enabled: !r.enabled } : r
+    ));
   };
 
   const handleNext = () => {
@@ -360,81 +465,14 @@ function ProjectConfigWizard({ onNavigate }) {
     }
   };
 
-  // 北向点表导入
-  const handleNorthboundPointTableImport = (e) => {
-    const file = e.target.files?.[0];
-    // Reset file input immediately
-    e.target.value = '';
-    
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const pointTable = JSON.parse(event.target.result);
-          if (Array.isArray(pointTable)) {
-            // Validate and normalize point table entries
-            const validatedPoints = pointTable.map((point, index) => ({
-              id: point.id || Date.now() + index,
-              sourcePath: point.sourcePath || '',
-              targetPath: point.targetPath || '',
-              dataType: point.dataType || 'float',
-              scale: typeof point.scale === 'number' ? point.scale : 1,
-              offset: typeof point.offset === 'number' ? point.offset : 0,
-              enabled: point.enabled !== false
-            }));
-            setNorthboundConfig(prev => ({
-              ...prev,
-              pointTableMapping: validatedPoints
-            }));
-            alert(`成功导入 ${validatedPoints.length} 个点位配置`);
-          } else {
-            alert('点表格式错误，请使用数组格式');
-          }
-        } catch (err) {
-          alert('点表文件解析失败');
-        }
-      };
-      reader.readAsText(file);
-    }
-  };
-
-  // 计数器用于生成唯一ID
-  const pointIdCounter = React.useRef(0);
-
-  // 添加北向点位
-  const handleAddNorthboundPoint = () => {
-    pointIdCounter.current += 1;
-    const newPoint = {
-      id: `point_${Date.now()}_${pointIdCounter.current}`,
-      sourcePath: '',
-      targetPath: '',
-      dataType: 'float',
-      scale: 1,
-      offset: 0,
-      enabled: true
-    };
-    setNorthboundConfig(prev => ({
-      ...prev,
-      pointTableMapping: [...prev.pointTableMapping, newPoint]
-    }));
-  };
-
-  // 删除北向点位
-  const handleDeleteNorthboundPoint = (pointId) => {
-    setNorthboundConfig(prev => ({
-      ...prev,
-      pointTableMapping: prev.pointTableMapping.filter(p => p.id !== pointId)
-    }));
-  };
-
   const handleValidateAndComplete = () => {
-    // 执行验证
     const results = [
-      { name: '工程信息完整性', status: projectInfo.name && projectInfo.location ? 'success' : 'error' },
+      { name: '项目信息完整性', status: projectInfo.name && projectInfo.location ? 'success' : 'error' },
+      { name: '场景模板选择', status: selectedTemplate ? 'success' : 'warning' },
       { name: '设备配置有效性', status: selectedDevices.length > 0 ? 'success' : 'warning' },
-      { name: '通信参数校验', status: 'success' },
       { name: '拓扑关系合法性', status: nodes.length > 0 ? 'success' : 'warning' },
-      { name: '算法策略配置', status: 'success' }
+      { name: '算法策略配置', status: 'success' },
+      { name: '告警规则配置', status: alarmRules.filter(r => r.enabled).length > 0 ? 'success' : 'warning' }
     ];
     setValidationResults(results);
     setCompleted(true);
@@ -443,6 +481,7 @@ function ProjectConfigWizard({ onNavigate }) {
   const handleExportConfig = () => {
     const config = {
       projectInfo,
+      selectedTemplate,
       devices: selectedDevices.map(d => ({
         ...d,
         params: deviceParams[d.instanceId]
@@ -452,9 +491,9 @@ function ProjectConfigWizard({ onNavigate }) {
         edges: edges.map(e => ({ source: e.source, target: e.target }))
       },
       algorithmConfig,
-      northboundConfig,
+      alarmRules,
       exportedAt: new Date().toISOString(),
-      version: '1.0'
+      version: '2.0'
     };
 
     const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
@@ -479,9 +518,8 @@ function ProjectConfigWizard({ onNavigate }) {
       reader.onload = (event) => {
         try {
           const config = JSON.parse(event.target.result);
-          if (config.projectInfo) {
-            setProjectInfo(config.projectInfo);
-          }
+          if (config.projectInfo) setProjectInfo(config.projectInfo);
+          if (config.selectedTemplate) setSelectedTemplate(config.selectedTemplate);
           if (config.devices) {
             setSelectedDevices(config.devices);
             const params = {};
@@ -490,14 +528,9 @@ function ProjectConfigWizard({ onNavigate }) {
             });
             setDeviceParams(params);
           }
-          if (config.algorithmConfig) {
-            setAlgorithmConfig(config.algorithmConfig);
-          }
-          if (config.northboundConfig) {
-            setNorthboundConfig(config.northboundConfig);
-          }
+          if (config.algorithmConfig) setAlgorithmConfig(config.algorithmConfig);
+          if (config.alarmRules) setAlarmRules(config.alarmRules);
           if (config.topology?.nodes) {
-            // 重建拓扑节点
             const category = (deviceType) => deviceCategories.find(c => 
               c.devices.some(d => d.id === deviceType)
             );
@@ -552,6 +585,7 @@ function ProjectConfigWizard({ onNavigate }) {
     const project = {
       id: `project_${Date.now()}`,
       ...projectInfo,
+      selectedTemplate,
       devices: selectedDevices.map(d => ({
         ...d,
         params: deviceParams[d.instanceId]
@@ -561,14 +595,60 @@ function ProjectConfigWizard({ onNavigate }) {
         edges: edges.map(e => ({ source: e.source, target: e.target }))
       },
       algorithmConfig,
-      northboundConfig,
+      alarmRules,
       createdAt: new Date().toISOString()
     };
 
-    const existingProjects = JSON.parse(localStorage.getItem('ems_projects') || '[]');
-    existingProjects.push(project);
-    localStorage.setItem('ems_projects', JSON.stringify(existingProjects));
+    try {
+      const existingProjects = JSON.parse(localStorage.getItem('ems_projects') || '[]');
+      existingProjects.push(project);
+      localStorage.setItem('ems_projects', JSON.stringify(existingProjects));
+    } catch (e) {
+      console.error('Failed to save project:', e);
+      alert('保存项目失败');
+    }
   };
+
+  // 权重滑块组件
+  const WeightSlider = ({ label, icon, description, value, onChange, color }) => (
+    <div style={{ 
+      background: 'var(--gray-50)', 
+      borderRadius: '12px', 
+      padding: '20px',
+      border: '1px solid var(--gray-200)'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+        <span style={{ fontSize: '24px' }}>{icon}</span>
+        <div>
+          <div style={{ fontWeight: '600', color: 'var(--gray-800)' }}>{label}</div>
+          <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{description}</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+        <input
+          type="range"
+          min="0"
+          max="100"
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          style={{ 
+            flex: 1, 
+            height: '8px',
+            accentColor: color || 'var(--primary)'
+          }}
+        />
+        <span style={{ 
+          fontSize: '20px', 
+          fontWeight: '600', 
+          color: color || 'var(--primary)',
+          minWidth: '50px',
+          textAlign: 'right'
+        }}>
+          {value}%
+        </span>
+      </div>
+    </div>
+  );
 
   if (completed) {
     return (
@@ -582,7 +662,6 @@ function ProjectConfigWizard({ onNavigate }) {
             </p>
           </div>
 
-          {/* 校验结果 */}
           <div style={{ maxWidth: '500px', margin: '0 auto 32px' }}>
             <h4 style={{ marginBottom: '16px' }}>配置校验结果</h4>
             <ul className="validation-list">
@@ -660,39 +739,102 @@ function ProjectConfigWizard({ onNavigate }) {
         </div>
 
         <div className="wizard-content">
-          {/* 步骤1: 工程基础信息 */}
+          {/* 步骤1: 项目基础信息 - 完全按照参考图设计 */}
           {currentStep === 1 && (
-            <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 1/6：工程基础信息</h3>
-              <div className="notice-banner info">
-                <span>💡</span>
-                <span>填写项目基本信息，便于后续管理和维护</span>
+            <div className="form-section">
+              <div className="form-section-header">
+                <span className="form-section-icon">🏢</span>
+                <div>
+                  <h3 className="form-section-title">项目基础信息</h3>
+                  <p className="form-section-desc">填写项目的基本信息，这些信息将用于项目识别和管理</p>
+                </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">
-                  工程名称 <span className="required">*</span>
-                </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="如：XX工厂1号配电房EMS配置"
-                  value={projectInfo.name}
-                  onChange={(e) => updateProjectInfo('name', e.target.value)}
-                />
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">
+                    项目名称 <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="例如：杭州工厂储能项目"
+                    value={projectInfo.name}
+                    onChange={(e) => updateProjectInfo('name', e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">
+                    项目位置 <span className="required">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="例如：浙江省杭州市"
+                    value={projectInfo.location}
+                    onChange={(e) => updateProjectInfo('location', e.target.value)}
+                  />
+                </div>
               </div>
 
+              {/* 系统类型选择 - 三选一卡片 */}
               <div className="form-group">
                 <label className="form-label">
-                  工程位置 <span className="required">*</span>
+                  系统类型 <span className="required">*</span>
                 </label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="如：XX市XX区XX路XX号 配电室"
-                  value={projectInfo.location}
-                  onChange={(e) => updateProjectInfo('location', e.target.value)}
-                />
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                  {systemTypes.map(type => (
+                    <div
+                      key={type.id}
+                      onClick={() => updateProjectInfo('systemType', type.id)}
+                      style={{
+                        padding: '20px',
+                        borderRadius: '12px',
+                        border: projectInfo.systemType === type.id 
+                          ? '2px solid var(--primary)' 
+                          : '1px solid var(--gray-200)',
+                        background: projectInfo.systemType === type.id 
+                          ? 'var(--primary-light)' 
+                          : 'white',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      <div style={{ 
+                        fontWeight: '600', 
+                        marginBottom: '4px',
+                        color: projectInfo.systemType === type.id ? 'var(--primary)' : 'var(--gray-800)'
+                      }}>
+                        {type.name}
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>
+                        {type.description}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 容量和功率 */}
+              <div className="form-row">
+                <div className="form-group">
+                  <label className="form-label">额定容量 (kWh)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={projectInfo.ratedCapacity}
+                    onChange={(e) => updateProjectInfo('ratedCapacity', Number(e.target.value))}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">额定功率 (kW)</label>
+                  <input
+                    type="number"
+                    className="form-input"
+                    value={projectInfo.ratedPower}
+                    onChange={(e) => updateProjectInfo('ratedPower', Number(e.target.value))}
+                  />
+                </div>
               </div>
 
               <div className="form-row">
@@ -717,26 +859,130 @@ function ProjectConfigWizard({ onNavigate }) {
                   />
                 </div>
               </div>
-
-              <div className="form-group">
-                <label className="form-label">项目描述</label>
-                <textarea
-                  className="form-textarea"
-                  placeholder="描述项目概况，如系统规模、主要设备等"
-                  value={projectInfo.description}
-                  onChange={(e) => updateProjectInfo('description', e.target.value)}
-                />
-              </div>
             </div>
           )}
 
-          {/* 步骤2: 物模型选择 */}
+          {/* 步骤2: 场景模板选择 - 完全按照参考图设计 */}
           {currentStep === 2 && (
+            <div className="form-section">
+              <div className="form-section-header">
+                <span className="form-section-icon">⚙️</span>
+                <div>
+                  <h3 className="form-section-title">选择场景模板</h3>
+                  <p className="form-section-desc">选择一个预置的场景模板，系统将自动推荐适合的设备和算法参数</p>
+                </div>
+              </div>
+
+              <div style={{ 
+                display: 'grid', 
+                gridTemplateColumns: 'repeat(2, 1fr)', 
+                gap: '20px',
+                marginTop: '20px'
+              }}>
+                {sceneTemplates.map(template => (
+                  <div
+                    key={template.id}
+                    onClick={() => handleSelectTemplate(template)}
+                    style={{
+                      padding: '24px',
+                      borderRadius: '12px',
+                      border: selectedTemplate?.id === template.id 
+                        ? '2px solid var(--primary)' 
+                        : '1px solid var(--gray-200)',
+                      background: selectedTemplate?.id === template.id 
+                        ? 'var(--primary-light)' 
+                        : 'white',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      display: 'flex',
+                      gap: '16px'
+                    }}
+                  >
+                    <div style={{ 
+                      width: '60px', 
+                      height: '60px', 
+                      background: 'var(--gray-100)',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '28px',
+                      flexShrink: 0
+                    }}>
+                      {template.icon}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        fontWeight: '600', 
+                        fontSize: '16px',
+                        marginBottom: '6px',
+                        color: selectedTemplate?.id === template.id ? 'var(--primary)' : 'var(--gray-800)'
+                      }}>
+                        {template.name}
+                      </div>
+                      <div style={{ 
+                        fontSize: '13px', 
+                        color: 'var(--gray-500)',
+                        marginBottom: '10px'
+                      }}>
+                        {template.description}
+                      </div>
+                      {template.devices.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {template.devices.map((device, i) => (
+                            <span 
+                              key={i}
+                              style={{
+                                fontSize: '11px',
+                                padding: '3px 8px',
+                                background: 'var(--gray-100)',
+                                borderRadius: '4px',
+                                color: 'var(--gray-600)'
+                              }}
+                            >
+                              {device}
+                            </span>
+                          ))}
+                          {template.extraDevices > 0 && (
+                            <span style={{
+                              fontSize: '11px',
+                              padding: '3px 8px',
+                              background: 'var(--gray-100)',
+                              borderRadius: '4px',
+                              color: 'var(--gray-600)'
+                            }}>
+                              +{template.extraDevices}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {selectedTemplate && (
+                <div className="notice-banner success" style={{ marginTop: '20px' }}>
+                  <span>✅</span>
+                  <span>已选择 "{selectedTemplate.name}" 模板，推荐使用{
+                    schedulingModes.find(m => m.id === selectedTemplate.recommendedAlgorithm)?.name || '经济优先'
+                  }调度模式</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 步骤3: 设备实例配置 */}
+          {currentStep === 3 && (
             <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 2/6：选择设备物模型</h3>
-              <div className="notice-banner info">
-                <span>💡</span>
-                <span>可以批量添加相同类型的多个设备实例，系统会自动分配端口和地址</span>
+              <div className="form-section">
+                <div className="form-section-header">
+                  <span className="form-section-icon">📦</span>
+                  <div>
+                    <h3 className="form-section-title">设备实例配置</h3>
+                    <p className="form-section-desc">选择物模型并配置设备实例，可批量添加相同类型设备</p>
+                  </div>
+                </div>
               </div>
               
               <div style={{ display: 'flex', gap: '24px' }}>
@@ -762,22 +1008,14 @@ function ProjectConfigWizard({ onNavigate }) {
                         const device = category?.devices.find(d => d.id === model.deviceType);
                         const existingCount = selectedDevices.filter(d => d.id === model.id).length;
                         return (
-                          <div
-                            key={model.id}
-                            className="device-card"
-                            style={{ cursor: 'pointer' }}
-                          >
+                          <div key={model.id} className="device-card" style={{ cursor: 'pointer' }}>
                             <div className="device-card-icon">{device?.icon || '📦'}</div>
                             <div className="device-card-title">{model.modelName}</div>
                             <div className="device-card-desc">
                               {model.manufacturer} | {model.voltageLevel?.toUpperCase()}
                             </div>
                             {existingCount > 0 && (
-                              <div style={{ 
-                                fontSize: '11px', 
-                                color: 'var(--primary)', 
-                                marginTop: '4px' 
-                              }}>
+                              <div style={{ fontSize: '11px', color: 'var(--primary)', marginTop: '4px' }}>
                                 已添加 {existingCount} 个
                               </div>
                             )}
@@ -887,222 +1125,23 @@ function ProjectConfigWizard({ onNavigate }) {
             </div>
           )}
 
-          {/* 步骤3: 参数微调 */}
-          {currentStep === 3 && (
-            <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 3/6：现场参数微调</h3>
-              <div className="notice-banner info">
-                <span>💡</span>
-                <span>以下仅展示现场差异化参数，其余配置复用物模型默认值。批量添加的设备已自动分配不同的端口和地址。</span>
-              </div>
-
-              {selectedDevices.length === 0 ? (
-                <div className="empty-state">
-                  <div className="empty-state-icon">⚙️</div>
-                  <div className="empty-state-title">暂无已选设备</div>
-                  <div className="empty-state-desc">请返回上一步添加设备</div>
-                </div>
-              ) : (
-                <div>
-                  {selectedDevices.map(device => (
-                    <div key={device.instanceId} className="collapse-panel">
-                      <div className="collapse-header">
-                        <span style={{ fontWeight: '600' }}>{device.instanceName}</span>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <span className="tag tag-blue">{device.protocolType || 'modbus_rtu'}</span>
-                          <span className={`tag ${deviceParams[device.instanceId]?.enabled !== false ? 'tag-green' : 'tag-gray'}`}>
-                            {deviceParams[device.instanceId]?.enabled !== false ? '已启用' : '已禁用'}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="collapse-content">
-                        {/* 启用开关 */}
-                        <div style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                            <input
-                              type="checkbox"
-                              checked={deviceParams[device.instanceId]?.enabled !== false}
-                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'enabled', e.target.checked)}
-                            />
-                            启用此设备
-                          </label>
-                        </div>
-                        
-                        <div className="form-row form-row-3">
-                          {/* 根据协议类型显示不同的参数 */}
-                          {(device.protocolType === 'modbus_rtu' || device.channelType === 'serial' || !device.protocolType) && (
-                            <>
-                              <div className="form-group" style={{ marginBottom: 0 }}>
-                                <label className="form-label">串口端口</label>
-                                <select
-                                  className="form-select"
-                                  value={deviceParams[device.instanceId]?.port || 'COM1'}
-                                  onChange={(e) => handleDeviceParamChange(device.instanceId, 'port', e.target.value)}
-                                >
-                                  {[...Array(10)].map((_, i) => (
-                                    <option key={i} value={`COM${i + 1}`}>COM{i + 1}</option>
-                                  ))}
-                                  <option value="/dev/ttyS0">/dev/ttyS0</option>
-                                  <option value="/dev/ttyS1">/dev/ttyS1</option>
-                                  <option value="/dev/ttyUSB0">/dev/ttyUSB0</option>
-                                  <option value="/dev/ttyUSB1">/dev/ttyUSB1</option>
-                                </select>
-                              </div>
-                              <div className="form-group" style={{ marginBottom: 0 }}>
-                                <label className="form-label">从站地址</label>
-                                <input
-                                  type="number"
-                                  className="form-input"
-                                  min="1"
-                                  max="247"
-                                  value={deviceParams[device.instanceId]?.slaveAddress || 1}
-                                  onChange={(e) => handleDeviceParamChange(device.instanceId, 'slaveAddress', Number(e.target.value))}
-                                />
-                              </div>
-                            </>
-                          )}
-                          {(device.protocolType === 'modbus_tcp' || device.channelType === 'ethernet') && (
-                            <>
-                              <div className="form-group" style={{ marginBottom: 0 }}>
-                                <label className="form-label">设备IP地址</label>
-                                <input
-                                  type="text"
-                                  className="form-input"
-                                  placeholder="192.168.1.100"
-                                  value={deviceParams[device.instanceId]?.ip || ''}
-                                  onChange={(e) => handleDeviceParamChange(device.instanceId, 'ip', e.target.value)}
-                                />
-                              </div>
-                              <div className="form-group" style={{ marginBottom: 0 }}>
-                                <label className="form-label">端口号</label>
-                                <input
-                                  type="number"
-                                  className="form-input"
-                                  value={deviceParams[device.instanceId]?.portNum || 502}
-                                  onChange={(e) => handleDeviceParamChange(device.instanceId, 'portNum', Number(e.target.value))}
-                                />
-                              </div>
-                            </>
-                          )}
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label">设备实例名称</label>
-                            <input
-                              type="text"
-                              className="form-input"
-                              value={device.instanceName}
-                              onChange={(e) => {
-                                setSelectedDevices(prev => prev.map(d => 
-                                  d.instanceId === device.instanceId 
-                                    ? { ...d, instanceName: e.target.value }
-                                    : d
-                                ));
-                              }}
-                            />
-                          </div>
-                        </div>
-                        
-                        {/* 增强参数 */}
-                        <div className="form-row form-row-3" style={{ marginTop: '16px' }}>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label">超时时间 (ms)</label>
-                            <input
-                              type="number"
-                              className="form-input"
-                              value={deviceParams[device.instanceId]?.timeout || 3000}
-                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'timeout', Number(e.target.value))}
-                            />
-                          </div>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label">重试次数</label>
-                            <input
-                              type="number"
-                              className="form-input"
-                              min="0"
-                              max="10"
-                              value={deviceParams[device.instanceId]?.retries || 3}
-                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'retries', Number(e.target.value))}
-                            />
-                          </div>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label">轮询周期 (ms)</label>
-                            <input
-                              type="number"
-                              className="form-input"
-                              value={deviceParams[device.instanceId]?.pollInterval || 1000}
-                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'pollInterval', Number(e.target.value))}
-                            />
-                          </div>
-                        </div>
-                        
-                        {/* 位置和备注 */}
-                        <div className="form-row" style={{ marginTop: '16px' }}>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label">设备别名</label>
-                            <input
-                              type="text"
-                              className="form-input"
-                              placeholder="如: 1号电池柜"
-                              value={deviceParams[device.instanceId]?.alias || ''}
-                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'alias', e.target.value)}
-                            />
-                          </div>
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label">安装位置</label>
-                            <input
-                              type="text"
-                              className="form-input"
-                              placeholder="如: 配电室A区"
-                              value={deviceParams[device.instanceId]?.location || ''}
-                              onChange={(e) => handleDeviceParamChange(device.instanceId, 'location', e.target.value)}
-                            />
-                          </div>
-                        </div>
-                        
-                        <div className="form-group" style={{ marginTop: '12px', marginBottom: 0 }}>
-                          <label className="form-label">备注</label>
-                          <input
-                            type="text"
-                            className="form-input"
-                            placeholder="其他说明信息"
-                            value={deviceParams[device.instanceId]?.notes || ''}
-                            onChange={(e) => handleDeviceParamChange(device.instanceId, 'notes', e.target.value)}
-                          />
-                        </div>
-                        
-                        <div style={{ marginTop: '12px', display: 'flex', gap: '8px' }}>
-                          <button className="btn btn-secondary btn-sm">
-                            🔍 测试连通性
-                          </button>
-                          <button 
-                            className="btn btn-danger btn-sm"
-                            onClick={() => handleRemoveDevice(device.instanceId)}
-                          >
-                            🗑️ 删除设备
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
           {/* 步骤4: 电气拓扑 */}
           {currentStep === 4 && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                <h3 style={{ margin: 0 }}>步骤 4/6：电气拓扑配置</h3>
+                <div className="form-section-header" style={{ marginBottom: 0 }}>
+                  <span className="form-section-icon">🔌</span>
+                  <div>
+                    <h3 className="form-section-title" style={{ marginBottom: 0 }}>电气拓扑配置</h3>
+                    <p className="form-section-desc" style={{ marginBottom: 0 }}>拖拽设备到画布，连接设备建立电气关系</p>
+                  </div>
+                </div>
                 <button 
-                  className="btn btn-secondary"
+                  className="btn btn-primary"
                   onClick={() => setIsTopologyFullscreen(true)}
                 >
-                  🔍 全屏模式
+                  🔍 全屏编辑
                 </button>
-              </div>
-              <div className="notice-banner info">
-                <span>💡</span>
-                <span>将左侧设备拖拽到画布，从设备边缘拖动连线建立电气关系。双击画布上的设备可删除。</span>
               </div>
 
               <div className={`topology-container ${isTopologyFullscreen ? 'fullscreen' : ''}`}
@@ -1131,106 +1170,90 @@ function ProjectConfigWizard({ onNavigate }) {
                   </div>
                 )}
                 <div style={{ display: 'flex', flex: 1, gap: '16px' }}>
-                {/* 左侧设备列表 */}
-                <div className="topology-sidebar" style={isTopologyFullscreen ? { width: '220px', maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' } : {}}>
-                  <div className="topology-sidebar-title">待配置设备</div>
-                  {selectedDevices.map(device => {
-                    const isOnCanvas = nodes.some(n => n.id === device.instanceId);
-                    const category = deviceCategories.find(c => c.id === device.deviceCategory);
-                    
-                    return (
-                      <div
-                        key={device.instanceId}
-                        className="draggable-device"
-                        draggable={!isOnCanvas}
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('application/json', JSON.stringify(device));
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        style={{
-                          opacity: isOnCanvas ? 0.5 : 1,
-                          cursor: isOnCanvas ? 'not-allowed' : 'grab'
-                        }}
-                      >
-                        <span style={{ fontSize: '20px' }}>{category?.icon || '📦'}</span>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: '13px', fontWeight: '500' }}>{device.instanceName}</div>
-                          <div style={{ fontSize: '11px', color: 'var(--gray-500)' }}>
-                            {isOnCanvas ? '已在画布' : '拖拽到画布'}
+                  {/* 左侧设备列表 */}
+                  <div className="topology-sidebar" style={isTopologyFullscreen ? { width: '220px', maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' } : {}}>
+                    <div className="topology-sidebar-title">待配置设备</div>
+                    {selectedDevices.map(device => {
+                      const isOnCanvas = nodes.some(n => n.id === device.instanceId);
+                      const category = deviceCategories.find(c => c.id === device.deviceCategory);
+                      
+                      return (
+                        <div
+                          key={device.instanceId}
+                          className="draggable-device"
+                          draggable={!isOnCanvas}
+                          onDragStart={(e) => {
+                            e.dataTransfer.setData('application/json', JSON.stringify(device));
+                            e.dataTransfer.effectAllowed = 'move';
+                          }}
+                          style={{
+                            opacity: isOnCanvas ? 0.5 : 1,
+                            cursor: isOnCanvas ? 'not-allowed' : 'grab'
+                          }}
+                        >
+                          <span style={{ fontSize: '20px' }}>{category?.icon || '📦'}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '13px', fontWeight: '500' }}>{device.instanceName}</div>
+                            <div style={{ fontSize: '11px', color: 'var(--gray-500)' }}>
+                              {isOnCanvas ? '已在画布' : '拖拽到画布'}
+                            </div>
                           </div>
+                          {isOnCanvas && (
+                            <button
+                              className="btn btn-sm"
+                              style={{ 
+                                padding: '2px 6px', 
+                                fontSize: '10px',
+                                background: '#fee2e2',
+                                color: '#dc2626',
+                                border: 'none'
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteTopologyNode(device.instanceId);
+                              }}
+                            >
+                              移除
+                            </button>
+                          )}
                         </div>
-                        {isOnCanvas && (
-                          <button
-                            className="btn btn-sm"
-                            style={{ 
-                              padding: '2px 6px', 
-                              fontSize: '10px',
-                              background: '#fee2e2',
-                              color: '#dc2626',
-                              border: 'none'
-                            }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleDeleteTopologyNode(device.instanceId);
-                            }}
-                          >
-                            移除
-                          </button>
-                        )}
+                      );
+                    })}
+                    
+                    {selectedDevices.length === 0 && (
+                      <div style={{ padding: '20px', textAlign: 'center', color: 'var(--gray-400)', fontSize: '13px' }}>
+                        暂无设备，请返回上一步添加
                       </div>
-                    );
-                  })}
-                  
-                  {selectedDevices.length === 0 && (
-                    <div style={{ 
-                      padding: '20px', 
-                      textAlign: 'center', 
-                      color: 'var(--gray-400)',
-                      fontSize: '13px'
-                    }}>
-                      暂无设备，请返回上一步添加
-                    </div>
-                  )}
-                  
-                  {/* 画布上的设备列表 */}
-                  {nodes.length > 0 && (
-                    <div style={{ marginTop: '16px' }}>
-                      <div className="topology-sidebar-title">画布上的设备 ({nodes.length})</div>
-                      <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginBottom: '8px' }}>
-                        点击"移除"可从画布删除设备
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
 
-                {/* 右侧拓扑画布 */}
-                <div className="topology-canvas" style={isTopologyFullscreen ? { flex: 1, height: 'calc(100vh - 180px)' } : {}}>
-                  <ReactFlowProvider>
-                    <ReactFlow
-                      nodes={nodes}
-                      edges={edges}
-                      onNodesChange={onNodesChange}
-                      onEdgesChange={onEdgesChange}
-                      onConnect={onConnect}
-                      onDrop={onDrop}
-                      onDragOver={onDragOver}
-                      onNodeClick={(event, node) => {
-                        // 双击删除节点
-                        if (event.detail === 2) {
-                          if (window.confirm(`确定从画布移除设备 "${node.id}" 吗？`)) {
-                            handleDeleteTopologyNode(node.id);
+                  {/* 右侧拓扑画布 */}
+                  <div className="topology-canvas" style={isTopologyFullscreen ? { flex: 1, height: 'calc(100vh - 180px)' } : {}}>
+                    <ReactFlowProvider>
+                      <ReactFlow
+                        nodes={nodes}
+                        edges={edges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onConnect={onConnect}
+                        onDrop={onDrop}
+                        onDragOver={onDragOver}
+                        onNodeClick={(event, node) => {
+                          if (event.detail === 2) {
+                            if (window.confirm(`确定从画布移除设备 "${node.id}" 吗？`)) {
+                              handleDeleteTopologyNode(node.id);
+                            }
                           }
-                        }
-                      }}
-                      fitView
-                      style={{ background: '#f8fafc' }}
-                    >
-                      <Controls />
-                      <MiniMap />
-                      <Background variant="dots" gap={20} size={1} />
-                    </ReactFlow>
-                  </ReactFlowProvider>
-                </div>
+                        }}
+                        fitView
+                        style={{ background: '#f8fafc' }}
+                      >
+                        <Controls />
+                        <MiniMap />
+                        <Background variant="dots" gap={20} size={1} />
+                      </ReactFlow>
+                    </ReactFlowProvider>
+                  </div>
                 </div>
               </div>
 
@@ -1252,1070 +1275,686 @@ function ProjectConfigWizard({ onNavigate }) {
                 >
                   🗑️ 清空画布
                 </button>
-                <button className="btn btn-secondary" onClick={() => {
-                  // 拓扑校验
-                  if (nodes.length === 0) {
-                    alert('请先添加设备到画布');
-                  } else if (edges.length === 0) {
-                    alert('请建立设备间的电气连接关系');
-                  } else {
-                    alert('✅ 拓扑配置合法！设备数量: ' + nodes.length + ', 连接数量: ' + edges.length);
-                  }
-                }}>
-                  ✅ 拓扑校验
-                </button>
               </div>
             </div>
           )}
 
-          {/* 步骤5: 算法策略 */}
+          {/* 步骤5: 算法策略配置 - 完全按照参考图的Tab式设计 */}
           {currentStep === 5 && (
             <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 5/6：算法策略配置</h3>
-              <div className="notice-banner info">
-                <span>💡</span>
-                <span>配置储能系统的运行策略，包括削峰填谷、需量控制和SOC管理等</span>
-              </div>
-
-              {/* 算法策略配置 */}
-              <div className="param-card" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-                <div className="param-card-title" style={{ color: 'white' }}>
-                  <span>⚡</span> 削峰填谷策略
-                </div>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={algorithmConfig.peakShaving.enabled}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        peakShaving: { ...prev.peakShaving, enabled: e.target.checked }
-                      }))}
-                    />
-                    <span>启用削峰填谷策略</span>
-                  </label>
-                </div>
-                
-                {algorithmConfig.peakShaving.enabled && (
+              <div className="form-section">
+                <div className="form-section-header">
+                  <span className="form-section-icon">⚙️</span>
                   <div>
-                    <h5 style={{ marginBottom: '12px' }}>峰时段配置</h5>
-                    <div className="time-period-table" style={{ background: 'rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px' }}>
-                      <div className="time-period-row time-period-header">
-                        <span>时段名称</span>
-                        <span>开始时间</span>
-                        <span>结束时间</span>
-                        <span>动作</span>
-                        <span>功率</span>
-                      </div>
-                      {algorithmConfig.peakShaving.peakPeriods.map((period, index) => (
-                        <div key={index} className="time-period-row">
-                          <span>{period.name}</span>
-                          <input
-                            type="time"
-                            className="form-input"
-                            value={period.startTime}
-                            onChange={(e) => {
-                              const newPeriods = [...algorithmConfig.peakShaving.peakPeriods];
-                              newPeriods[index] = { ...period, startTime: e.target.value };
-                              setAlgorithmConfig(prev => ({
-                                ...prev,
-                                peakShaving: { ...prev.peakShaving, peakPeriods: newPeriods }
-                              }));
-                            }}
-                            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white' }}
-                          />
-                          <input
-                            type="time"
-                            className="form-input"
-                            value={period.endTime}
-                            onChange={(e) => {
-                              const newPeriods = [...algorithmConfig.peakShaving.peakPeriods];
-                              newPeriods[index] = { ...period, endTime: e.target.value };
-                              setAlgorithmConfig(prev => ({
-                                ...prev,
-                                peakShaving: { ...prev.peakShaving, peakPeriods: newPeriods }
-                              }));
-                            }}
-                            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white' }}
-                          />
-                          <span className="tag tag-red">{period.action === 'discharge' ? '放电' : '充电'}</span>
-                          <span>{period.maxPower}kW</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* 需量控制 */}
-              <div className="param-card">
-                <div className="param-card-title">
-                  <span>📊</span> 需量控制策略
-                </div>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={algorithmConfig.demandControl.enabled}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        demandControl: { ...prev.demandControl, enabled: e.target.checked }
-                      }))}
-                    />
-                    <span>启用需量控制</span>
-                  </label>
-                </div>
-                {algorithmConfig.demandControl.enabled && (
-                  <div className="param-grid">
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">需量限值 (kW)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={algorithmConfig.demandControl.demandLimit}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          demandControl: { ...prev.demandControl, demandLimit: Number(e.target.value) }
-                        }))}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">预警阈值 (%)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={algorithmConfig.demandControl.warningThreshold}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          demandControl: { ...prev.demandControl, warningThreshold: Number(e.target.value) }
-                        }))}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">动作阈值 (%)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={algorithmConfig.demandControl.actionThreshold}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          demandControl: { ...prev.demandControl, actionThreshold: Number(e.target.value) }
-                        }))}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">响应时间 (s)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={algorithmConfig.demandControl.responseTime}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          demandControl: { ...prev.demandControl, responseTime: Number(e.target.value) }
-                        }))}
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* SOC管理 */}
-              <div className="param-card">
-                <div className="param-card-title">
-                  <span>🔋</span> SOC管理策略
-                </div>
-                <div className="param-grid">
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">最低SOC (%)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={algorithmConfig.socManagement.minSoc}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        socManagement: { ...prev.socManagement, minSoc: Number(e.target.value) }
-                      }))}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">最高SOC (%)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={algorithmConfig.socManagement.maxSoc}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        socManagement: { ...prev.socManagement, maxSoc: Number(e.target.value) }
-                      }))}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">目标SOC (%)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={algorithmConfig.socManagement.targetSoc}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        socManagement: { ...prev.socManagement, targetSoc: Number(e.target.value) }
-                      }))}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">应急储备 (%)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={algorithmConfig.socManagement.emergencyReserve}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        socManagement: { ...prev.socManagement, emergencyReserve: Number(e.target.value) }
-                      }))}
-                    />
+                    <h3 className="form-section-title">算法策略配置</h3>
+                    <p className="form-section-desc">配置EMS调度算法的目标权重、约束参数和高级策略</p>
                   </div>
                 </div>
               </div>
 
-              {/* 功率控制 */}
-              <div className="param-card">
-                <div className="param-card-title">
-                  <span>⚙️</span> 功率控制参数
-                </div>
-                <div className="param-grid">
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">功率变化率 (kW/min)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={algorithmConfig.powerControl.rampRate}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        powerControl: { ...prev.powerControl, rampRate: Number(e.target.value) }
-                      }))}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">最大充电功率 (kW)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={algorithmConfig.powerControl.maxChargePower}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        powerControl: { ...prev.powerControl, maxChargePower: Number(e.target.value) }
-                      }))}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">最大放电功率 (kW)</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={algorithmConfig.powerControl.maxDischargePower}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        powerControl: { ...prev.powerControl, maxDischargePower: Number(e.target.value) }
-                      }))}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">功率因数</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      step="0.01"
-                      value={algorithmConfig.powerControl.powerFactor}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        powerControl: { ...prev.powerControl, powerFactor: Number(e.target.value) }
-                      }))}
-                    />
-                  </div>
-                </div>
+              {/* Tab切换栏 */}
+              <div style={{ 
+                display: 'flex', 
+                background: 'var(--gray-100)', 
+                borderRadius: '12px', 
+                padding: '4px',
+                marginBottom: '24px'
+              }}>
+                {[
+                  { id: 'mode', name: '调度模式' },
+                  { id: 'weight', name: '目标权重' },
+                  { id: 'constraint', name: '约束参数' },
+                  { id: 'advanced', name: '高级策略' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setAlgorithmTab(tab.id)}
+                    style={{
+                      flex: 1,
+                      padding: '12px 20px',
+                      border: 'none',
+                      borderRadius: '8px',
+                      background: algorithmTab === tab.id ? 'white' : 'transparent',
+                      color: algorithmTab === tab.id ? 'var(--gray-800)' : 'var(--gray-500)',
+                      fontWeight: algorithmTab === tab.id ? '600' : '400',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                      boxShadow: algorithmTab === tab.id ? '0 1px 3px rgba(0,0,0,0.1)' : 'none'
+                    }}
+                  >
+                    {tab.name}
+                  </button>
+                ))}
               </div>
 
-              {/* 逆功率保护 */}
-              <div className="param-card" style={{ background: '#dc2626' }}>
-                <div className="param-card-title" style={{ color: 'white' }}>
-                  <span>🛡️</span> 逆功率保护
-                </div>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'white' }}>
-                    <input
-                      type="checkbox"
-                      checked={algorithmConfig.reversePowerProtection?.enabled || false}
-                      onChange={(e) => setAlgorithmConfig(prev => ({
-                        ...prev,
-                        reversePowerProtection: { ...prev.reversePowerProtection, enabled: e.target.checked }
-                      }))}
-                    />
-                    <span>启用逆功率保护</span>
-                  </label>
-                </div>
-                {algorithmConfig.reversePowerProtection?.enabled && (
-                  <div className="param-grid">
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>逆功率阈值 (kW)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        min="0"
-                        max="10000"
-                        value={algorithmConfig.reversePowerProtection?.threshold || 10}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          reversePowerProtection: { ...prev.reversePowerProtection, threshold: Math.max(0, Number(e.target.value)) }
-                        }))}
-                        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white' }}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>动作延迟 (s)</label>
-                      <input
-                        type="number"
-                        className="form-input"
-                        min="0"
-                        max="300"
-                        value={algorithmConfig.reversePowerProtection?.actionDelay || 5}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          reversePowerProtection: { ...prev.reversePowerProtection, actionDelay: Math.max(0, Number(e.target.value)) }
-                        }))}
-                        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white' }}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>保护模式</label>
-                      <select
-                        className="form-select"
-                        value={algorithmConfig.reversePowerProtection?.protectMode || 'cutoff'}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          reversePowerProtection: { ...prev.reversePowerProtection, protectMode: e.target.value }
-                        }))}
-                        style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white' }}
+              {/* 调度模式Tab */}
+              {algorithmTab === 'mode' && (
+                <div>
+                  <h4 style={{ marginBottom: '16px', color: 'var(--gray-700)' }}>调度模式选择</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                    {schedulingModes.map(mode => (
+                      <div
+                        key={mode.id}
+                        onClick={() => setAlgorithmConfig(prev => ({ ...prev, schedulingMode: mode.id }))}
+                        style={{
+                          padding: '24px',
+                          borderRadius: '12px',
+                          border: algorithmConfig.schedulingMode === mode.id 
+                            ? '2px solid var(--primary)' 
+                            : '1px solid var(--gray-200)',
+                          background: algorithmConfig.schedulingMode === mode.id 
+                            ? 'var(--primary-light)' 
+                            : 'white',
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          transition: 'all 0.2s'
+                        }}
                       >
-                        <option value="cutoff" style={{ color: 'black' }}>切断</option>
-                        <option value="reduce" style={{ color: 'black' }}>降功率</option>
-                      </select>
+                        <div style={{ fontSize: '32px', marginBottom: '12px' }}>{mode.icon}</div>
+                        <div style={{ 
+                          fontWeight: '600',
+                          color: algorithmConfig.schedulingMode === mode.id ? 'var(--primary)' : 'var(--gray-800)'
+                        }}>
+                          {mode.name}
+                        </div>
+                        <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginTop: '4px' }}>
+                          {mode.description}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 目标权重Tab */}
+              {algorithmTab === 'weight' && (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '20px' }}>
+                    <WeightSlider
+                      label="经济性权重"
+                      icon="💵"
+                      description="电费成本最小化"
+                      value={algorithmConfig.weights.economic}
+                      onChange={(v) => setAlgorithmConfig(prev => ({
+                        ...prev,
+                        weights: { ...prev.weights, economic: v }
+                      }))}
+                      color="#10b981"
+                    />
+                    <WeightSlider
+                      label="寿命权重"
+                      icon="🔋"
+                      description="储能充放电平滑"
+                      value={algorithmConfig.weights.lifespan}
+                      onChange={(v) => setAlgorithmConfig(prev => ({
+                        ...prev,
+                        weights: { ...prev.weights, lifespan: v }
+                      }))}
+                      color="#3b82f6"
+                    />
+                    <WeightSlider
+                      label="SOC协同权重"
+                      icon="📊"
+                      description="多储能均衡"
+                      value={algorithmConfig.weights.socBalance}
+                      onChange={(v) => setAlgorithmConfig(prev => ({
+                        ...prev,
+                        weights: { ...prev.weights, socBalance: v }
+                      }))}
+                      color="#8b5cf6"
+                    />
+                    <WeightSlider
+                      label="弃电最小化权重"
+                      icon="⚡"
+                      description="减少弃风弃光"
+                      value={algorithmConfig.weights.curtailmentMin}
+                      onChange={(v) => setAlgorithmConfig(prev => ({
+                        ...prev,
+                        weights: { ...prev.weights, curtailmentMin: v }
+                      }))}
+                      color="#f59e0b"
+                    />
+                  </div>
+                  
+                  {/* 权重总和显示 */}
+                  {(() => {
+                    const total = algorithmConfig.weights.economic + algorithmConfig.weights.lifespan + 
+                                  algorithmConfig.weights.socBalance + algorithmConfig.weights.curtailmentMin;
+                    const isValid = total >= 95 && total <= 105;
+                    return (
+                      <div className={`notice-banner ${isValid ? 'success' : 'warning'}`} style={{ marginTop: '20px' }}>
+                        <span>{isValid ? '✅' : '⚠️'}</span>
+                        <span>
+                          当前权重总和: <strong>{total}%</strong>
+                          {isValid ? ' - 配置有效，系统会自动归一化处理' : ' - 建议调整到接近100%'}
+                        </span>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* 约束参数Tab */}
+              {algorithmTab === 'constraint' && (
+                <div>
+                  {/* 功率约束 */}
+                  <div style={{ marginBottom: '24px' }}>
+                    <div className="form-row form-row-3">
+                      <div className="form-group">
+                        <label className="form-label">
+                          <span style={{ marginRight: '6px' }}>⚡</span>功率平衡容差
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={algorithmConfig.constraints.powerBalanceTolerance}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              constraints: { ...prev.constraints, powerBalanceTolerance: Number(e.target.value) }
+                            }))}
+                          />
+                          <span style={{ color: 'var(--gray-500)' }}>kW</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--gray-400)', marginTop: '4px' }}>
+                          允许的功率不平衡范围
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">
+                          <span style={{ marginRight: '6px' }}>🎯</span>目标SOC
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={algorithmConfig.constraints.targetSoc}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              constraints: { ...prev.constraints, targetSoc: Number(e.target.value) }
+                            }))}
+                          />
+                          <span style={{ color: 'var(--gray-500)' }}>%</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--gray-400)', marginTop: '4px' }}>
+                          储能目标充电状态
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">
+                          <span style={{ marginRight: '6px' }}>🔌</span>并网功率限制
+                        </label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={algorithmConfig.constraints.gridPowerLimit}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              constraints: { ...prev.constraints, gridPowerLimit: Number(e.target.value) }
+                            }))}
+                          />
+                          <span style={{ color: 'var(--gray-500)' }}>kW</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--gray-400)', marginTop: '4px' }}>
+                          最大并网功率
+                        </div>
+                      </div>
                     </div>
                   </div>
-                )}
-              </div>
 
-              {/* 新能源接入策略 */}
-              <div className="param-card">
-                <div className="param-card-title">
-                  <span>🌿</span> 新能源接入策略
+                  {/* SOC管理参数 */}
+                  <div style={{ 
+                    background: 'var(--gray-50)', 
+                    borderRadius: '12px', 
+                    padding: '20px',
+                    border: '1px solid var(--gray-200)'
+                  }}>
+                    <h4 style={{ marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>🔋</span> SOC管理参数
+                    </h4>
+                    <div className="form-row form-row-3">
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">SOC充电下限</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={algorithmConfig.constraints.socChargeMin}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              constraints: { ...prev.constraints, socChargeMin: Number(e.target.value) }
+                            }))}
+                          />
+                          <span style={{ color: 'var(--gray-500)' }}>%</span>
+                        </div>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">SOC放电上限</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={algorithmConfig.constraints.socDischargeMax}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              constraints: { ...prev.constraints, socDischargeMax: Number(e.target.value) }
+                            }))}
+                          />
+                          <span style={{ color: 'var(--gray-500)' }}>%</span>
+                        </div>
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label className="form-label">SOC协同系数</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            step="0.1"
+                            min="0"
+                            max="1"
+                            value={algorithmConfig.constraints.socCoefficient}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
+                              ...prev,
+                              constraints: { ...prev.constraints, socCoefficient: Number(e.target.value) }
+                            }))}
+                          />
+                          <span style={{ color: 'var(--gray-500)' }}>-</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                  {/* 风电接入 */}
-                  <div style={{ padding: '16px', background: 'var(--gray-50)', borderRadius: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '12px' }}>
-                      <input
-                        type="checkbox"
-                        checked={algorithmConfig.windIntegration?.enabled || false}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          windIntegration: { ...prev.windIntegration, enabled: e.target.checked }
-                        }))}
-                      />
-                      <span style={{ fontWeight: '600' }}>🌬️ 风电接入</span>
-                    </label>
-                    {algorithmConfig.windIntegration?.enabled && (
-                      <div style={{ fontSize: '13px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span>优先级</span>
-                          <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }} 
-                            value={algorithmConfig.windIntegration?.priorityLevel || 1}
-                            onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev, windIntegration: { ...prev.windIntegration, priorityLevel: Number(e.target.value) }
-                            }))} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>限功率 (kW)</span>
-                          <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
-                            value={algorithmConfig.windIntegration?.maxPowerLimit || 1000}
-                            onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev, windIntegration: { ...prev.windIntegration, maxPowerLimit: Number(e.target.value) }
-                            }))} />
-                        </div>
+              )}
+
+              {/* 高级策略Tab */}
+              {algorithmTab === 'advanced' && (
+                <div>
+                  <div className="form-row form-row-3">
+                    <div className="form-group">
+                      <label className="form-label">调度周期</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={algorithmConfig.advanced.schedulingPeriod}
+                          onChange={(e) => setAlgorithmConfig(prev => ({
+                            ...prev,
+                            advanced: { ...prev.advanced, schedulingPeriod: Number(e.target.value) }
+                          }))}
+                        />
+                        <span style={{ color: 'var(--gray-500)' }}>分钟</span>
                       </div>
-                    )}
-                  </div>
-                  
-                  {/* 光伏接入 */}
-                  <div style={{ padding: '16px', background: 'var(--gray-50)', borderRadius: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '12px' }}>
-                      <input
-                        type="checkbox"
-                        checked={algorithmConfig.solarIntegration?.enabled || false}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          solarIntegration: { ...prev.solarIntegration, enabled: e.target.checked }
-                        }))}
-                      />
-                      <span style={{ fontWeight: '600' }}>☀️ 光伏接入</span>
-                    </label>
-                    {algorithmConfig.solarIntegration?.enabled && (
-                      <div style={{ fontSize: '13px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span>优先级</span>
-                          <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }}
-                            value={algorithmConfig.solarIntegration?.priorityLevel || 2}
-                            onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev, solarIntegration: { ...prev.solarIntegration, priorityLevel: Number(e.target.value) }
-                            }))} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>限功率 (kW)</span>
-                          <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
-                            value={algorithmConfig.solarIntegration?.maxPowerLimit || 500}
-                            onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev, solarIntegration: { ...prev.solarIntegration, maxPowerLimit: Number(e.target.value) }
-                            }))} />
-                        </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">预测时间窗</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={algorithmConfig.advanced.predictionHorizon}
+                          onChange={(e) => setAlgorithmConfig(prev => ({
+                            ...prev,
+                            advanced: { ...prev.advanced, predictionHorizon: Number(e.target.value) }
+                          }))}
+                        />
+                        <span style={{ color: 'var(--gray-500)' }}>小时</span>
                       </div>
-                    )}
-                  </div>
-                  
-                  {/* 柴发接入 */}
-                  <div style={{ padding: '16px', background: 'var(--gray-50)', borderRadius: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '12px' }}>
-                      <input
-                        type="checkbox"
-                        checked={algorithmConfig.dieselIntegration?.enabled || false}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          dieselIntegration: { ...prev.dieselIntegration, enabled: e.target.checked }
-                        }))}
-                      />
-                      <span style={{ fontWeight: '600' }}>⛽ 柴发接入</span>
-                    </label>
-                    {algorithmConfig.dieselIntegration?.enabled && (
-                      <div style={{ fontSize: '13px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span>启动SOC阈值 (%)</span>
-                          <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }}
-                            value={algorithmConfig.dieselIntegration?.startSocThreshold || 15}
-                            onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev, dieselIntegration: { ...prev.dieselIntegration, startSocThreshold: Number(e.target.value) }
-                            }))} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span>停止SOC阈值 (%)</span>
-                          <input type="number" className="form-input" style={{ width: '60px', padding: '4px' }}
-                            value={algorithmConfig.dieselIntegration?.stopSocThreshold || 80}
-                            onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev, dieselIntegration: { ...prev.dieselIntegration, stopSocThreshold: Number(e.target.value) }
-                            }))} />
-                        </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">安全余量</label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={algorithmConfig.advanced.safetyMargin}
+                          onChange={(e) => setAlgorithmConfig(prev => ({
+                            ...prev,
+                            advanced: { ...prev.advanced, safetyMargin: Number(e.target.value) }
+                          }))}
+                        />
+                        <span style={{ color: 'var(--gray-500)' }}>%</span>
                       </div>
-                    )}
+                    </div>
                   </div>
-                  
-                  {/* 充电桩接入 */}
-                  <div style={{ padding: '16px', background: 'var(--gray-50)', borderRadius: '8px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '12px' }}>
-                      <input
-                        type="checkbox"
-                        checked={algorithmConfig.chargerIntegration?.enabled || false}
-                        onChange={(e) => setAlgorithmConfig(prev => ({
-                          ...prev,
-                          chargerIntegration: { ...prev.chargerIntegration, enabled: e.target.checked }
-                        }))}
-                      />
-                      <span style={{ fontWeight: '600' }}>🔌 充电桩接入</span>
-                    </label>
-                    {algorithmConfig.chargerIntegration?.enabled && (
-                      <div style={{ fontSize: '13px' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                          <span>总功率限制 (kW)</span>
-                          <input type="number" className="form-input" style={{ width: '80px', padding: '4px' }}
-                            value={algorithmConfig.chargerIntegration?.maxTotalPower || 300}
-                            onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev, chargerIntegration: { ...prev.chargerIntegration, maxTotalPower: Number(e.target.value) }
-                            }))} />
+
+                  {/* 策略开关 */}
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(2, 1fr)', 
+                    gap: '16px',
+                    marginTop: '20px'
+                  }}>
+                    {[
+                      { key: 'antiReversePower', name: '逆功率保护', desc: '防止电力倒送电网' },
+                      { key: 'gridPeakShaving', name: '电网削峰', desc: '高峰期储能放电' },
+                      { key: 'loadFollowing', name: '负载跟踪', desc: '跟踪负载变化调节' }
+                    ].map(item => (
+                      <div 
+                        key={item.key}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '16px',
+                          background: 'var(--gray-50)',
+                          borderRadius: '8px',
+                          border: '1px solid var(--gray-200)'
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: '500' }}>{item.name}</div>
+                          <div style={{ fontSize: '12px', color: 'var(--gray-500)' }}>{item.desc}</div>
                         </div>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                          <input type="checkbox" checked={algorithmConfig.chargerIntegration?.loadBalancing !== false}
+                        <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                          <input
+                            type="checkbox"
+                            checked={algorithmConfig.advanced[item.key]}
                             onChange={(e) => setAlgorithmConfig(prev => ({
-                              ...prev, chargerIntegration: { ...prev.chargerIntegration, loadBalancing: e.target.checked }
-                            }))} />
-                          <span>负载均衡</span>
+                              ...prev,
+                              advanced: { ...prev.advanced, [item.key]: e.target.checked }
+                            }))}
+                            style={{ opacity: 0, width: 0, height: 0 }}
+                          />
+                          <span style={{
+                            position: 'absolute',
+                            cursor: 'pointer',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            backgroundColor: algorithmConfig.advanced[item.key] ? 'var(--primary)' : '#ccc',
+                            borderRadius: '24px',
+                            transition: '0.3s'
+                          }}>
+                            <span style={{
+                              position: 'absolute',
+                              height: '18px',
+                              width: '18px',
+                              left: algorithmConfig.advanced[item.key] ? '27px' : '3px',
+                              bottom: '3px',
+                              backgroundColor: 'white',
+                              borderRadius: '50%',
+                              transition: '0.3s'
+                            }} />
+                          </span>
                         </label>
                       </div>
-                    )}
+                    ))}
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
 
-          {/* 步骤6: 北向配置 */}
-          {currentStep === 6 && (
-            <div>
-              <h3 style={{ marginBottom: '20px' }}>步骤 6/6：北向接口配置</h3>
-              <div className="notice-banner info">
-                <span>💡</span>
-                <span>配置数据上报到上级平台的接口参数，包括协议、地址、点表映射等</span>
-              </div>
-
-              {/* 北向配置 */}
-              <div className="param-card" style={{ background: '#1e3a5f', color: 'white' }}>
-                <div className="param-card-title" style={{ color: 'white' }}>
-                  <span>🌐</span> 北向接口基础配置
-                </div>
-                <div style={{ marginBottom: '16px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <input
-                      type="checkbox"
-                      checked={northboundConfig.enabled}
-                      onChange={(e) => setNorthboundConfig(prev => ({ ...prev, enabled: e.target.checked }))}
-                    />
-                    <span>启用北向数据上报</span>
-                  </label>
-                </div>
-                
-                {northboundConfig.enabled && (
-                  <>
-                    <div className="param-grid">
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>协议类型</label>
-                        <select
-                          className="form-select"
-                          value={northboundConfig.protocol}
-                          onChange={(e) => {
-                            const protocol = northboundProtocols.find(p => p.id === e.target.value);
-                            setNorthboundConfig(prev => ({
+                  {/* 逆功率保护阈值 */}
+                  {algorithmConfig.advanced.antiReversePower && (
+                    <div style={{ marginTop: '16px' }}>
+                      <div className="form-group" style={{ maxWidth: '300px' }}>
+                        <label className="form-label">逆功率保护阈值</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            type="number"
+                            className="form-input"
+                            value={algorithmConfig.advanced.antiReversePowerThreshold}
+                            onChange={(e) => setAlgorithmConfig(prev => ({
                               ...prev,
-                              protocol: e.target.value,
-                              serverPort: protocol?.port || 1883
-                            }));
-                          }}
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                        >
-                          {northboundProtocols.map(p => (
-                            <option key={p.id} value={p.id} style={{ color: 'black' }}>{p.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>服务器地址</label>
-                        <input
-                          type="text"
-                          className="form-input"
-                          placeholder="192.168.1.200"
-                          value={northboundConfig.serverIp}
-                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, serverIp: e.target.value }))}
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                        />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>端口号</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={northboundConfig.serverPort}
-                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, serverPort: Number(e.target.value) }))}
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                        />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>上报周期 (ms)</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={northboundConfig.publishInterval}
-                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, publishInterval: Number(e.target.value) }))}
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* MQTT特定配置 */}
-                    {northboundConfig.protocol === 'mqtt' && (
-                      <div className="param-grid" style={{ marginTop: '16px' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Topic</label>
-                          <input
-                            type="text"
-                            className="form-input"
-                            placeholder="ems/data"
-                            value={northboundConfig.topic}
-                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, topic: e.target.value }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Client ID</label>
-                          <input
-                            type="text"
-                            className="form-input"
-                            value={northboundConfig.clientId}
-                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, clientId: e.target.value }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>QoS等级</label>
-                          <select
-                            className="form-select"
-                            value={northboundConfig.qos}
-                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, qos: Number(e.target.value) }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          >
-                            <option value={0} style={{ color: 'black' }}>QoS 0 - 最多一次</option>
-                            <option value={1} style={{ color: 'black' }}>QoS 1 - 至少一次</option>
-                            <option value={2} style={{ color: 'black' }}>QoS 2 - 恰好一次</option>
-                          </select>
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Keep Alive (s)</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={northboundConfig.keepAlive}
-                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, keepAlive: Number(e.target.value) }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>用户名</label>
-                          <input
-                            type="text"
-                            className="form-input"
-                            placeholder="可选"
-                            value={northboundConfig.username}
-                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, username: e.target.value }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>密码</label>
-                          <input
-                            type="password"
-                            className="form-input"
-                            placeholder="可选"
-                            value={northboundConfig.password}
-                            onChange={(e) => setNorthboundConfig(prev => ({ ...prev, password: e.target.value }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* IEC104特定配置 */}
-                    {northboundConfig.protocol === 'iec104_server' && (
-                      <div className="param-grid" style={{ marginTop: '16px' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>公共地址</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={northboundConfig.iec104Config?.commonAddress || 1}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              iec104Config: { ...prev.iec104Config, commonAddress: Number(e.target.value) }
+                              advanced: { ...prev.advanced, antiReversePowerThreshold: Number(e.target.value) }
                             }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
                           />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>K值</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={northboundConfig.iec104Config?.k || 12}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              iec104Config: { ...prev.iec104Config, k: Number(e.target.value) }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>W值</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={northboundConfig.iec104Config?.w || 8}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              iec104Config: { ...prev.iec104Config, w: Number(e.target.value) }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>T1超时 (s)</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={northboundConfig.iec104Config?.t1 || 15}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              iec104Config: { ...prev.iec104Config, t1: Number(e.target.value) }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>T2超时 (s)</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={northboundConfig.iec104Config?.t2 || 10}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              iec104Config: { ...prev.iec104Config, t2: Number(e.target.value) }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>T3超时 (s)</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={northboundConfig.iec104Config?.t3 || 20}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              iec104Config: { ...prev.iec104Config, t3: Number(e.target.value) }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
+                          <span style={{ color: 'var(--gray-500)' }}>kW</span>
                         </div>
                       </div>
-                    )}
-
-                    {/* HTTP/REST API特定配置 */}
-                    {(northboundConfig.protocol === 'http' || northboundConfig.protocol === 'https') && (
-                      <div className="param-grid" style={{ marginTop: '16px' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>请求方法</label>
-                          <select
-                            className="form-select"
-                            value={northboundConfig.httpConfig?.method || 'POST'}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              httpConfig: { ...prev.httpConfig, method: e.target.value }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          >
-                            <option value="POST" style={{ color: 'black' }}>POST</option>
-                            <option value="PUT" style={{ color: 'black' }}>PUT</option>
-                          </select>
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Content-Type</label>
-                          <select
-                            className="form-select"
-                            value={northboundConfig.httpConfig?.contentType || 'application/json'}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              httpConfig: { ...prev.httpConfig, contentType: e.target.value }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          >
-                            <option value="application/json" style={{ color: 'black' }}>application/json</option>
-                            <option value="application/xml" style={{ color: 'black' }}>application/xml</option>
-                          </select>
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>认证方式</label>
-                          <select
-                            className="form-select"
-                            value={northboundConfig.httpConfig?.authType || 'none'}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              httpConfig: { ...prev.httpConfig, authType: e.target.value }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          >
-                            <option value="none" style={{ color: 'black' }}>无认证</option>
-                            <option value="basic" style={{ color: 'black' }}>Basic Auth</option>
-                            <option value="bearer" style={{ color: 'black' }}>Bearer Token</option>
-                          </select>
-                        </div>
-                        {northboundConfig.httpConfig?.authType === 'bearer' && (
-                          <div className="form-group" style={{ marginBottom: 0 }}>
-                            <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>Token</label>
-                            <input
-                              type="password"
-                              className="form-input"
-                              placeholder="Bearer Token"
-                              value={northboundConfig.httpConfig?.authToken || ''}
-                              onChange={(e) => setNorthboundConfig(prev => ({ 
-                                ...prev, 
-                                httpConfig: { ...prev.httpConfig, authToken: e.target.value }
-                              }))}
-                              style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Modbus TCP服务端配置 */}
-                    {northboundConfig.protocol === 'modbus_tcp_server' && (
-                      <div className="param-grid" style={{ marginTop: '16px' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>从站地址</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            min="1"
-                            max="247"
-                            value={northboundConfig.modbusServerConfig?.unitId || 1}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              modbusServerConfig: { ...prev.modbusServerConfig, unitId: Number(e.target.value) }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>最大连接数</label>
-                          <input
-                            type="number"
-                            className="form-input"
-                            value={northboundConfig.modbusServerConfig?.maxConnections || 5}
-                            onChange={(e) => setNorthboundConfig(prev => ({ 
-                              ...prev, 
-                              modbusServerConfig: { ...prev.modbusServerConfig, maxConnections: Number(e.target.value) }
-                            }))}
-                            style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                          />
-                        </div>
-                      </div>
-                    )}
-                    
-                    {/* 高级配置 */}
-                    <div className="param-grid" style={{ marginTop: '16px' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>心跳间隔 (s)</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={northboundConfig.heartbeatInterval}
-                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, heartbeatInterval: Number(e.target.value) }))}
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                        />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>重连间隔 (ms)</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={northboundConfig.reconnectInterval}
-                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, reconnectInterval: Number(e.target.value) }))}
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                        />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>最大重连次数</label>
-                        <input
-                          type="number"
-                          className="form-input"
-                          value={northboundConfig.maxReconnectAttempts}
-                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, maxReconnectAttempts: Number(e.target.value) }))}
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                        />
-                      </div>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label" style={{ color: 'rgba(255,255,255,0.9)' }}>数据格式</label>
-                        <select
-                          className="form-select"
-                          value={northboundConfig.dataFormat}
-                          onChange={(e) => setNorthboundConfig(prev => ({ ...prev, dataFormat: e.target.value }))}
-                          style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.3)', color: 'white' }}
-                        >
-                          <option value="json" style={{ color: 'black' }}>JSON</option>
-                          <option value="xml" style={{ color: 'black' }}>XML</option>
-                          <option value="binary" style={{ color: 'black' }}>Binary</option>
-                        </select>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* 点表配置 */}
-              {northboundConfig.enabled && (
-                <div className="param-card">
-                  <div className="param-card-title">
-                    <span>📋</span> 点表映射配置
-                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-                      <input
-                        type="file"
-                        ref={northboundFileInputRef}
-                        onChange={handleNorthboundPointTableImport}
-                        accept=".json"
-                        style={{ display: 'none' }}
-                      />
-                      <button 
-                        className="btn btn-sm btn-secondary"
-                        onClick={() => northboundFileInputRef.current?.click()}
-                      >
-                        📥 导入点表
-                      </button>
-                      <button 
-                        className="btn btn-sm btn-primary"
-                        onClick={handleAddNorthboundPoint}
-                      >
-                        ➕ 添加点位
-                      </button>
-                    </div>
-                  </div>
-                  <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={northboundConfig.pointTableEnabled}
-                        onChange={(e) => setNorthboundConfig(prev => ({ ...prev, pointTableEnabled: e.target.checked }))}
-                      />
-                      <span>启用点表映射</span>
-                    </label>
-                  </div>
-                  
-                  {northboundConfig.pointTableEnabled && (
-                    <div>
-                      {northboundConfig.pointTableMapping.length === 0 ? (
-                        <div style={{ 
-                          padding: '30px', 
-                          textAlign: 'center', 
-                          color: 'var(--gray-400)',
-                          border: '1px dashed var(--gray-300)',
-                          borderRadius: '8px'
-                        }}>
-                          暂无点位配置，点击"添加点位"或"导入点表"
-                        </div>
-                      ) : (
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                            <thead>
-                              <tr style={{ background: 'var(--gray-100)' }}>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--gray-200)' }}>源路径</th>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--gray-200)' }}>目标路径</th>
-                                <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid var(--gray-200)' }}>数据类型</th>
-                                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid var(--gray-200)' }}>倍率</th>
-                                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid var(--gray-200)' }}>偏移</th>
-                                <th style={{ padding: '8px', textAlign: 'center', borderBottom: '1px solid var(--gray-200)' }}>操作</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {northboundConfig.pointTableMapping.map((point, index) => (
-                                <tr key={point.id} style={{ borderBottom: '1px solid var(--gray-100)' }}>
-                                  <td style={{ padding: '6px' }}>
-                                    <input
-                                      type="text"
-                                      className="form-input"
-                                      style={{ padding: '4px 8px', fontSize: '12px' }}
-                                      placeholder="如: pcs/power"
-                                      value={point.sourcePath}
-                                      onChange={(e) => {
-                                        const newMapping = [...northboundConfig.pointTableMapping];
-                                        newMapping[index] = { ...point, sourcePath: e.target.value };
-                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
-                                      }}
-                                    />
-                                  </td>
-                                  <td style={{ padding: '6px' }}>
-                                    <input
-                                      type="text"
-                                      className="form-input"
-                                      style={{ padding: '4px 8px', fontSize: '12px' }}
-                                      placeholder="如: data/active_power"
-                                      value={point.targetPath}
-                                      onChange={(e) => {
-                                        const newMapping = [...northboundConfig.pointTableMapping];
-                                        newMapping[index] = { ...point, targetPath: e.target.value };
-                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
-                                      }}
-                                    />
-                                  </td>
-                                  <td style={{ padding: '6px' }}>
-                                    <select
-                                      className="form-select"
-                                      style={{ padding: '4px 8px', fontSize: '12px' }}
-                                      value={point.dataType}
-                                      onChange={(e) => {
-                                        const newMapping = [...northboundConfig.pointTableMapping];
-                                        newMapping[index] = { ...point, dataType: e.target.value };
-                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
-                                      }}
-                                    >
-                                      <option value="float">Float</option>
-                                      <option value="int">Int</option>
-                                      <option value="bool">Bool</option>
-                                      <option value="string">String</option>
-                                    </select>
-                                  </td>
-                                  <td style={{ padding: '6px', width: '80px' }}>
-                                    <input
-                                      type="number"
-                                      className="form-input"
-                                      style={{ padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
-                                      value={point.scale}
-                                      onChange={(e) => {
-                                        const newMapping = [...northboundConfig.pointTableMapping];
-                                        newMapping[index] = { ...point, scale: Number(e.target.value) };
-                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
-                                      }}
-                                    />
-                                  </td>
-                                  <td style={{ padding: '6px', width: '80px' }}>
-                                    <input
-                                      type="number"
-                                      className="form-input"
-                                      style={{ padding: '4px 8px', fontSize: '12px', textAlign: 'center' }}
-                                      value={point.offset}
-                                      onChange={(e) => {
-                                        const newMapping = [...northboundConfig.pointTableMapping];
-                                        newMapping[index] = { ...point, offset: Number(e.target.value) };
-                                        setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newMapping }));
-                                      }}
-                                    />
-                                  </td>
-                                  <td style={{ padding: '6px', textAlign: 'center' }}>
-                                    <button
-                                      className="btn btn-sm btn-danger"
-                                      onClick={() => handleDeleteNorthboundPoint(point.id)}
-                                    >
-                                      删除
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
               )}
             </div>
           )}
+
+          {/* 步骤6: 告警规则配置 */}
+          {currentStep === 6 && (
+            <div>
+              <div className="form-section">
+                <div className="form-section-header">
+                  <span className="form-section-icon">🔔</span>
+                  <div>
+                    <h3 className="form-section-title">告警规则配置</h3>
+                    <p className="form-section-desc">配置设备告警规则，系统会在触发条件时发出告警通知</p>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div style={{ fontSize: '14px', color: 'var(--gray-600)' }}>
+                  已配置 {alarmRules.length} 条规则，{alarmRules.filter(r => r.enabled).length} 条已启用
+                </div>
+                <button 
+                  className="btn btn-primary"
+                  onClick={() => setShowAddAlarmModal(true)}
+                >
+                  ➕ 新增告警规则
+                </button>
+              </div>
+
+              {/* 告警规则列表 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {alarmRules.map(rule => (
+                  <div 
+                    key={rule.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '16px',
+                      background: 'white',
+                      border: '1px solid var(--gray-200)',
+                      borderRadius: '8px',
+                      gap: '16px'
+                    }}
+                  >
+                    {/* 告警等级标识 */}
+                    <div style={{
+                      width: '8px',
+                      height: '40px',
+                      borderRadius: '4px',
+                      background: alarmLevels.find(l => l.id === rule.level)?.color || '#3b82f6'
+                    }} />
+                    
+                    {/* 规则信息 */}
+                    <div style={{ flex: 1 }}>
+                      <div style={{ 
+                        fontWeight: '500', 
+                        marginBottom: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}>
+                        {rule.name}
+                        <span style={{
+                          fontSize: '11px',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: hexToRgba(alarmLevels.find(l => l.id === rule.level)?.color, 0.15),
+                          color: alarmLevels.find(l => l.id === rule.level)?.color
+                        }}>
+                          {alarmLevels.find(l => l.id === rule.level)?.name}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>
+                        触发条件: {rule.condition}
+                      </div>
+                    </div>
+
+                    {/* 启用开关 */}
+                    <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
+                      <input
+                        type="checkbox"
+                        checked={rule.enabled}
+                        onChange={() => handleToggleAlarmRule(rule.id)}
+                        style={{ opacity: 0, width: 0, height: 0 }}
+                      />
+                      <span style={{
+                        position: 'absolute',
+                        cursor: 'pointer',
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        backgroundColor: rule.enabled ? 'var(--primary)' : '#ccc',
+                        borderRadius: '24px',
+                        transition: '0.3s'
+                      }}>
+                        <span style={{
+                          position: 'absolute',
+                          height: '18px',
+                          width: '18px',
+                          left: rule.enabled ? '27px' : '3px',
+                          bottom: '3px',
+                          backgroundColor: 'white',
+                          borderRadius: '50%',
+                          transition: '0.3s'
+                        }} />
+                      </span>
+                    </label>
+
+                    {/* 删除按钮 (只有自定义规则可删除) */}
+                    {rule.id.startsWith('custom_') && (
+                      <button
+                        className="btn btn-sm"
+                        style={{ background: '#fee2e2', color: '#dc2626', border: 'none' }}
+                        onClick={() => handleDeleteAlarmRule(rule.id)}
+                      >
+                        删除
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* 新增告警规则弹窗 */}
+              {showAddAlarmModal && (
+                <div 
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'rgba(0,0,0,0.5)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 1000
+                  }}
+                  onClick={() => setShowAddAlarmModal(false)}
+                >
+                  <div 
+                    style={{
+                      background: 'white',
+                      borderRadius: '12px',
+                      padding: '24px',
+                      width: '500px',
+                      maxWidth: '90vw'
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <h3 style={{ marginBottom: '20px' }}>新增告警规则</h3>
+                    
+                    <div className="form-group">
+                      <label className="form-label">规则名称 <span className="required">*</span></label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="如：电压过高告警"
+                        value={newAlarmRule.name}
+                        onChange={(e) => setNewAlarmRule(prev => ({ ...prev, name: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">触发条件 <span className="required">*</span></label>
+                      <input
+                        type="text"
+                        className="form-input"
+                        placeholder="如：电压 > 420V"
+                        value={newAlarmRule.condition}
+                        onChange={(e) => setNewAlarmRule(prev => ({ ...prev, condition: e.target.value }))}
+                      />
+                    </div>
+
+                    <div className="form-group">
+                      <label className="form-label">告警等级</label>
+                      <div style={{ display: 'flex', gap: '12px' }}>
+                        {alarmLevels.map(level => (
+                          <label 
+                            key={level.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              cursor: 'pointer',
+                              padding: '8px 12px',
+                              borderRadius: '6px',
+                              border: newAlarmRule.level === level.id 
+                                ? `2px solid ${level.color}` 
+                                : '1px solid var(--gray-200)',
+                              background: newAlarmRule.level === level.id 
+                                ? hexToRgba(level.color, 0.1) 
+                                : 'white'
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name="alarmLevel"
+                              checked={newAlarmRule.level === level.id}
+                              onChange={() => setNewAlarmRule(prev => ({ ...prev, level: level.id }))}
+                              style={{ display: 'none' }}
+                            />
+                            <span style={{ 
+                              width: '10px', 
+                              height: '10px', 
+                              borderRadius: '50%', 
+                              background: level.color 
+                            }} />
+                            <span>{level.name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+                      <button 
+                        className="btn btn-secondary"
+                        onClick={() => setShowAddAlarmModal(false)}
+                      >
+                        取消
+                      </button>
+                      <button 
+                        className="btn btn-primary"
+                        onClick={handleAddAlarmRule}
+                        disabled={!newAlarmRule.name || !newAlarmRule.condition}
+                      >
+                        确认添加
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* 底部按钮 */}
+        {/* 底部导航按钮 */}
         <div className="wizard-footer">
-          <div className="wizard-footer-left">
-            <button
-              className="btn btn-secondary"
-              disabled={currentStep === 1}
-              onClick={handlePrev}
-            >
-              ← 上一步
-            </button>
-          </div>
-          <div className="wizard-footer-right">
-            <button className="btn btn-primary" onClick={handleNext}>
-              {currentStep === 6 ? '✓ 校验并完成' : '下一步 →'}
-            </button>
-          </div>
+          <button
+            className="btn btn-secondary btn-lg"
+            onClick={handlePrev}
+            disabled={currentStep === 1}
+          >
+            ← 上一步
+          </button>
+          <button
+            className="btn btn-primary btn-lg"
+            onClick={handleNext}
+          >
+            {currentStep === 6 ? '完成配置 →' : '下一步 →'}
+          </button>
         </div>
       </div>
     </div>
