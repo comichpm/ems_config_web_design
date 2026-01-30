@@ -124,6 +124,22 @@ const nodeStyles = {
   grid: { background: '#fee2e2', borderColor: '#ef4444' }
 };
 
+// Helper function to get device icon by category
+const getDeviceIcon = (category) => {
+  const iconMap = {
+    storage: '🔋',
+    solar: '☀️',
+    wind: '🌬️',
+    diesel: '⛽',
+    charger: '🔌',
+    environment: '🌡️',
+    fire: '🧯',
+    custom: '🔧',
+    other: '⚡'
+  };
+  return iconMap[category] || '📦';
+};
+
 // Helper function to convert hex color to rgba with opacity
 const hexToRgba = (hex, alpha = 1) => {
   if (!hex) return 'rgba(59, 130, 246, 0.1)'; // default blue with transparency
@@ -377,17 +393,6 @@ function ProjectConfigWizard({ onNavigate }) {
         [field]: isNumeric ? (value === '' ? '' : parseInt(value, 10) || 0) : value
       }
     }));
-  };
-
-  // 验证IP地址格式
-  const isValidIp = (ip) => {
-    if (!ip) return false;
-    const parts = ip.split('.');
-    if (parts.length !== 4) return false;
-    return parts.every(part => {
-      const num = parseInt(part, 10);
-      return !isNaN(num) && num >= 0 && num <= 255 && String(num) === part;
-    });
   };
 
   // 添加单个设备实例
@@ -912,41 +917,69 @@ function ProjectConfigWizard({ onNavigate }) {
                 </div>
               </div>
 
-              {/* 系统类型选择 - 三选一卡片 */}
+              {/* 系统类型选择 - 三选一卡片 - 优化视觉反馈 */}
               <div className="form-group">
                 <label className="form-label">
                   系统类型 <span className="required">*</span>
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
-                  {systemTypes.map(type => (
-                    <div
-                      key={type.id}
-                      onClick={() => updateProjectInfo('systemType', type.id)}
-                      style={{
-                        padding: '20px',
-                        borderRadius: '12px',
-                        border: projectInfo.systemType === type.id 
-                          ? '2px solid var(--primary)' 
-                          : '1px solid var(--gray-200)',
-                        background: projectInfo.systemType === type.id 
-                          ? 'var(--primary-light)' 
-                          : 'white',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      <div style={{ 
-                        fontWeight: '600', 
-                        marginBottom: '4px',
-                        color: projectInfo.systemType === type.id ? 'var(--primary)' : 'var(--gray-800)'
-                      }}>
-                        {type.name}
+                  {systemTypes.map(type => {
+                    const isSelected = projectInfo.systemType === type.id;
+                    return (
+                      <div
+                        key={type.id}
+                        onClick={() => updateProjectInfo('systemType', type.id)}
+                        style={{
+                          padding: '20px',
+                          borderRadius: '12px',
+                          border: isSelected 
+                            ? '3px solid var(--primary)' 
+                            : '2px solid var(--gray-200)',
+                          background: isSelected 
+                            ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' 
+                            : 'white',
+                          cursor: 'pointer',
+                          transition: 'all 0.3s ease',
+                          transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+                          boxShadow: isSelected ? '0 4px 12px rgba(76, 175, 80, 0.3)' : 'none',
+                          position: 'relative'
+                        }}
+                      >
+                        {/* 选中勾选图标 */}
+                        {isSelected && (
+                          <div style={{
+                            position: 'absolute',
+                            top: '-10px',
+                            right: '-10px',
+                            width: '28px',
+                            height: '28px',
+                            borderRadius: '50%',
+                            background: 'var(--primary)',
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '16px',
+                            fontWeight: 'bold',
+                            boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                          }}>
+                            ✓
+                          </div>
+                        )}
+                        <div style={{ 
+                          fontWeight: '600', 
+                          marginBottom: '6px',
+                          fontSize: '15px',
+                          color: isSelected ? 'var(--primary)' : 'var(--gray-800)'
+                        }}>
+                          {isSelected && '● '}{type.name}
+                        </div>
+                        <div style={{ fontSize: '13px', color: isSelected ? 'var(--gray-700)' : 'var(--gray-500)' }}>
+                          {type.description}
+                        </div>
                       </div>
-                      <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>
-                        {type.description}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -1008,92 +1041,142 @@ function ProjectConfigWizard({ onNavigate }) {
                 </div>
               </div>
 
+              {/* 场景选择与模板管理关系说明 */}
+              <div style={{
+                background: 'linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%)',
+                borderRadius: '12px',
+                padding: '16px 20px',
+                marginBottom: '20px',
+                border: '1px solid #bbdefb'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+                  <span style={{ fontSize: '24px' }}>💡</span>
+                  <div>
+                    <div style={{ fontWeight: '600', color: '#1565c0', marginBottom: '8px' }}>
+                      场景模板与模板管理的关系
+                    </div>
+                    <div style={{ fontSize: '13px', color: '#424242', lineHeight: '1.6' }}>
+                      <strong>场景模板</strong>：是项目配置时的快捷入口，帮助您快速选择适合的设备组合和算法配置。<br/>
+                      <strong>模板管理</strong>：是模板的管理中心，您可以在那里创建、编辑、删除自定义模板。<br/>
+                      <span style={{ color: '#2e7d32' }}>✨ 在模板管理中创建的自定义模板会自动出现在下方场景列表中供选择。</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div style={{ 
                 display: 'grid', 
                 gridTemplateColumns: 'repeat(2, 1fr)', 
                 gap: '20px',
                 marginTop: '20px'
               }}>
-                {sceneTemplates.map(template => (
-                  <div
-                    key={template.id}
-                    onClick={() => handleSelectTemplate(template)}
-                    style={{
-                      padding: '24px',
-                      borderRadius: '12px',
-                      border: selectedTemplate?.id === template.id 
-                        ? '2px solid var(--primary)' 
-                        : '1px solid var(--gray-200)',
-                      background: selectedTemplate?.id === template.id 
-                        ? 'var(--primary-light)' 
-                        : 'white',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      display: 'flex',
-                      gap: '16px'
-                    }}
-                  >
-                    <div style={{ 
-                      width: '60px', 
-                      height: '60px', 
-                      background: 'var(--gray-100)',
-                      borderRadius: '12px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '28px',
-                      flexShrink: 0
-                    }}>
-                      {template.icon}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ 
-                        fontWeight: '600', 
-                        fontSize: '16px',
-                        marginBottom: '6px',
-                        color: selectedTemplate?.id === template.id ? 'var(--primary)' : 'var(--gray-800)'
-                      }}>
-                        {template.name}
-                      </div>
-                      <div style={{ 
-                        fontSize: '13px', 
-                        color: 'var(--gray-500)',
-                        marginBottom: '10px'
-                      }}>
-                        {template.description}
-                      </div>
-                      {template.devices.length > 0 && (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                          {template.devices.map((device, i) => (
-                            <span 
-                              key={i}
-                              style={{
-                                fontSize: '11px',
-                                padding: '3px 8px',
-                                background: 'var(--gray-100)',
-                                borderRadius: '4px',
-                                color: 'var(--gray-600)'
-                              }}
-                            >
-                              {device}
-                            </span>
-                          ))}
-                          {template.extraDevices > 0 && (
-                            <span style={{
-                              fontSize: '11px',
-                              padding: '3px 8px',
-                              background: 'var(--gray-100)',
-                              borderRadius: '4px',
-                              color: 'var(--gray-600)'
-                            }}>
-                              +{template.extraDevices}
-                            </span>
-                          )}
+                {sceneTemplates.map(template => {
+                  const isSelected = selectedTemplate?.id === template.id;
+                  return (
+                    <div
+                      key={template.id}
+                      onClick={() => handleSelectTemplate(template)}
+                      style={{
+                        padding: '24px',
+                        borderRadius: '12px',
+                        border: isSelected 
+                          ? '3px solid var(--primary)' 
+                          : '2px solid var(--gray-200)',
+                        background: isSelected 
+                          ? 'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)' 
+                          : 'white',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        transform: isSelected ? 'scale(1.02)' : 'scale(1)',
+                        boxShadow: isSelected ? '0 4px 12px rgba(76, 175, 80, 0.3)' : 'none',
+                        display: 'flex',
+                        gap: '16px',
+                        position: 'relative'
+                      }}
+                    >
+                      {/* 选中勾选图标 */}
+                      {isSelected && (
+                        <div style={{
+                          position: 'absolute',
+                          top: '-10px',
+                          right: '-10px',
+                          width: '28px',
+                          height: '28px',
+                          borderRadius: '50%',
+                          background: 'var(--primary)',
+                          color: 'white',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: '16px',
+                          fontWeight: 'bold',
+                          boxShadow: '0 2px 6px rgba(0,0,0,0.2)'
+                        }}>
+                          ✓
                         </div>
                       )}
+                      <div style={{ 
+                        width: '60px', 
+                        height: '60px', 
+                        background: isSelected ? 'white' : 'var(--gray-100)',
+                        borderRadius: '12px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '28px',
+                        flexShrink: 0
+                      }}>
+                        {template.icon}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ 
+                          fontWeight: '600', 
+                          fontSize: '16px',
+                          marginBottom: '6px',
+                          color: isSelected ? 'var(--primary)' : 'var(--gray-800)'
+                        }}>
+                          {isSelected && '● '}{template.name}
+                        </div>
+                        <div style={{ 
+                          fontSize: '13px', 
+                          color: isSelected ? 'var(--gray-700)' : 'var(--gray-500)',
+                          marginBottom: '10px'
+                        }}>
+                          {template.description}
+                        </div>
+                        {template.devices.length > 0 && (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {template.devices.map((device, idx) => (
+                              <span 
+                                key={`${template.id}-device-${idx}`}
+                                style={{
+                                  fontSize: '11px',
+                                  padding: '3px 8px',
+                                  background: isSelected ? 'white' : 'var(--gray-100)',
+                                  borderRadius: '4px',
+                                  color: 'var(--gray-600)'
+                                }}
+                              >
+                                {device}
+                              </span>
+                            ))}
+                            {template.extraDevices > 0 && (
+                              <span style={{
+                                fontSize: '11px',
+                                padding: '3px 8px',
+                                background: isSelected ? 'white' : 'var(--gray-100)',
+                                borderRadius: '4px',
+                                color: 'var(--gray-600)'
+                              }}>
+                                +{template.extraDevices}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               {selectedTemplate && (
@@ -1104,6 +1187,32 @@ function ProjectConfigWizard({ onNavigate }) {
                   }调度模式</span>
                 </div>
               )}
+
+              {/* 跳转到模板管理 */}
+              <div style={{
+                marginTop: '20px',
+                padding: '16px',
+                background: '#fafafa',
+                borderRadius: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between'
+              }}>
+                <div>
+                  <div style={{ fontWeight: '500', marginBottom: '4px' }}>找不到合适的模板？</div>
+                  <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>
+                    您可以在模板管理中创建自己的专属模板
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onNavigate && onNavigate('templates', '模板管理')}
+                  className="btn btn-secondary"
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  🔧 去模板管理
+                </button>
+              </div>
             </div>
           )}
 
@@ -1267,11 +1376,11 @@ function ProjectConfigWizard({ onNavigate }) {
                 <span className="form-section-icon">🔧</span>
                 <div>
                   <h3 className="form-section-title">设备参数微调</h3>
-                  <p className="form-section-desc">根据现场实际情况，微调选中设备的通讯参数和业务参数</p>
+                  <p className="form-section-desc">根据现场实际情况，微调选中设备的通讯参数和业务参数（仅显示第3步选择的设备）</p>
                 </div>
               </div>
 
-              {deviceModels.length === 0 ? (
+              {selectedDevices.length === 0 ? (
                 <div style={{ 
                   padding: '60px 20px', 
                   textAlign: 'center', 
@@ -1280,12 +1389,35 @@ function ProjectConfigWizard({ onNavigate }) {
                   borderRadius: '12px'
                 }}>
                   <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
-                  <div>请先在"设备选择"步骤中选择需要配置的设备</div>
+                  <div style={{ marginBottom: '12px' }}>请先在"设备选择"步骤中选择需要配置的设备</div>
+                  <button 
+                    type="button"
+                    className="btn btn-secondary"
+                    onClick={() => setCurrentStep(3)}
+                  >
+                    ← 返回设备选择
+                  </button>
                 </div>
               ) : (
                 <div>
-                  {deviceModels.map((device) => (
-                    <div key={device.id} style={{ 
+                  {/* 显示选中设备统计 */}
+                  <div style={{
+                    background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+                    padding: '12px 16px',
+                    borderRadius: '8px',
+                    marginBottom: '20px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px'
+                  }}>
+                    <span style={{ fontSize: '20px' }}>📊</span>
+                    <span style={{ color: '#1565c0', fontWeight: '500' }}>
+                      已选择 {selectedDevices.length} 台设备，请配置各设备的通讯和业务参数
+                    </span>
+                  </div>
+
+                  {selectedDevices.map((device) => (
+                    <div key={device.instanceId} style={{ 
                       marginBottom: '24px', 
                       background: 'var(--gray-50)', 
                       borderRadius: '12px', 
@@ -1300,24 +1432,34 @@ function ProjectConfigWizard({ onNavigate }) {
                         paddingBottom: '16px',
                         borderBottom: '1px solid var(--gray-200)'
                       }}>
-                        <span style={{ fontSize: '24px' }}>{device.icon}</span>
-                        <div>
-                          <h4 style={{ margin: 0, color: 'var(--gray-800)' }}>{device.name}</h4>
+                        <span style={{ fontSize: '24px' }}>{getDeviceIcon(device.category)}</span>
+                        <div style={{ flex: 1 }}>
+                          <h4 style={{ margin: 0, color: 'var(--gray-800)' }}>{device.instanceName || device.modelName || '未命名设备'}</h4>
                           <span style={{ fontSize: '13px', color: 'var(--gray-500)' }}>
-                            数量: {device.quantity} 台 | 类型: {device.type}
+                            类型: {device.deviceType || '未知'} | 物模型: {device.modelName || '-'}
                           </span>
                         </div>
+                        <span style={{
+                          padding: '4px 10px',
+                          background: deviceParams[device.instanceId]?.enabled !== false ? '#c8e6c9' : '#ffcdd2',
+                          color: deviceParams[device.instanceId]?.enabled !== false ? '#2e7d32' : '#c62828',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          fontWeight: '500'
+                        }}>
+                          {deviceParams[device.instanceId]?.enabled !== false ? '已启用' : '已禁用'}
+                        </span>
                       </div>
 
                       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                         {/* 通讯参数 */}
                         <div>
-                          <label className="form-label" htmlFor={`protocol-${device.id}`} style={{ fontSize: '13px' }}>通讯协议</label>
+                          <label className="form-label" htmlFor={`protocol-${device.instanceId}`} style={{ fontSize: '13px' }}>通讯协议</label>
                           <select 
-                            id={`protocol-${device.id}`}
+                            id={`protocol-${device.instanceId}`}
                             className="form-select"
-                            value={deviceParams[device.id]?.protocol || 'modbus_tcp'}
-                            onChange={(e) => updateDeviceParam(device.id, 'protocol', e.target.value)}
+                            value={deviceParams[device.instanceId]?.protocol || 'modbus_tcp'}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'protocol', e.target.value)}
                           >
                             <option value="modbus_tcp">Modbus TCP</option>
                             <option value="modbus_rtu">Modbus RTU</option>
@@ -1329,278 +1471,110 @@ function ProjectConfigWizard({ onNavigate }) {
                         </div>
 
                         <div>
-                          <label className="form-label" htmlFor={`address-${device.id}`} style={{ fontSize: '13px' }}>IP地址/端口</label>
+                          <label className="form-label" htmlFor={`ip-${device.instanceId}`} style={{ fontSize: '13px' }}>IP地址</label>
                           <input 
-                            id={`address-${device.id}`}
+                            id={`ip-${device.instanceId}`}
                             type="text" 
                             className="form-input"
-                            placeholder="192.168.1.100:502"
-                            value={deviceParams[device.id]?.address || ''}
-                            onChange={(e) => updateDeviceParam(device.id, 'address', e.target.value)}
+                            placeholder="192.168.1.100"
+                            value={deviceParams[device.instanceId]?.ip || ''}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'ip', e.target.value)}
                           />
                         </div>
 
                         <div>
-                          <label className="form-label" htmlFor={`slaveId-${device.id}`} style={{ fontSize: '13px' }}>从站地址</label>
+                          <label className="form-label" htmlFor={`slaveAddress-${device.instanceId}`} style={{ fontSize: '13px' }}>从站地址</label>
                           <input 
-                            id={`slaveId-${device.id}`}
+                            id={`slaveAddress-${device.instanceId}`}
                             type="number" 
                             className="form-input"
                             min="1"
                             max="247"
                             placeholder="1"
-                            value={deviceParams[device.id]?.slaveId ?? ''}
-                            onChange={(e) => updateDeviceParam(device.id, 'slaveId', e.target.value, true)}
+                            value={deviceParams[device.instanceId]?.slaveAddress ?? ''}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'slaveAddress', e.target.value, true)}
                           />
                         </div>
 
                         <div>
-                          <label className="form-label" htmlFor={`pollInterval-${device.id}`} style={{ fontSize: '13px' }}>轮询周期(ms)</label>
+                          <label className="form-label" htmlFor={`pollInterval-${device.instanceId}`} style={{ fontSize: '13px' }}>轮询周期(ms)</label>
                           <input 
-                            id={`pollInterval-${device.id}`}
+                            id={`pollInterval-${device.instanceId}`}
                             type="number" 
                             className="form-input"
                             min="100"
                             step="100"
                             placeholder="1000"
-                            value={deviceParams[device.id]?.pollInterval ?? ''}
-                            onChange={(e) => updateDeviceParam(device.id, 'pollInterval', e.target.value, true)}
+                            value={deviceParams[device.instanceId]?.pollInterval ?? ''}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'pollInterval', e.target.value, true)}
                           />
                         </div>
 
                         <div>
-                          <label className="form-label" htmlFor={`timeout-${device.id}`} style={{ fontSize: '13px' }}>超时时间(ms)</label>
+                          <label className="form-label" htmlFor={`timeout-${device.instanceId}`} style={{ fontSize: '13px' }}>超时时间(ms)</label>
                           <input 
-                            id={`timeout-${device.id}`}
+                            id={`timeout-${device.instanceId}`}
                             type="number" 
                             className="form-input"
                             min="100"
                             step="100"
                             placeholder="3000"
-                            value={deviceParams[device.id]?.timeout ?? ''}
-                            onChange={(e) => updateDeviceParam(device.id, 'timeout', e.target.value, true)}
+                            value={deviceParams[device.instanceId]?.timeout ?? ''}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'timeout', e.target.value, true)}
                           />
                         </div>
 
                         <div>
-                          <label className="form-label" htmlFor={`retryCount-${device.id}`} style={{ fontSize: '13px' }}>重试次数</label>
+                          <label className="form-label" htmlFor={`retries-${device.instanceId}`} style={{ fontSize: '13px' }}>重试次数</label>
                           <input 
-                            id={`retryCount-${device.id}`}
+                            id={`retries-${device.instanceId}`}
                             type="number" 
                             className="form-input"
                             min="0"
                             max="10"
                             placeholder="3"
-                            value={deviceParams[device.id]?.retryCount ?? ''}
-                            onChange={(e) => updateDeviceParam(device.id, 'retryCount', e.target.value, true)}
+                            value={deviceParams[device.instanceId]?.retries ?? ''}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'retries', e.target.value, true)}
                           />
                         </div>
 
                         <div>
-                          <label className="form-label" htmlFor={`alias-${device.id}`} style={{ fontSize: '13px' }}>设备别名</label>
+                          <label className="form-label" htmlFor={`alias-${device.instanceId}`} style={{ fontSize: '13px' }}>设备别名</label>
                           <input 
-                            id={`alias-${device.id}`}
+                            id={`alias-${device.instanceId}`}
                             type="text" 
                             className="form-input"
                             placeholder="输入设备别名"
-                            value={deviceParams[device.id]?.alias || ''}
-                            onChange={(e) => updateDeviceParam(device.id, 'alias', e.target.value)}
+                            value={deviceParams[device.instanceId]?.alias || ''}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'alias', e.target.value)}
                           />
                         </div>
 
                         <div>
-                          <label className="form-label" htmlFor={`location-${device.id}`} style={{ fontSize: '13px' }}>安装位置</label>
+                          <label className="form-label" htmlFor={`location-${device.instanceId}`} style={{ fontSize: '13px' }}>安装位置</label>
                           <input 
-                            id={`location-${device.id}`}
+                            id={`location-${device.instanceId}`}
                             type="text" 
                             className="form-input"
                             placeholder="如: 1#配电室"
-                            value={deviceParams[device.id]?.location || ''}
-                            onChange={(e) => updateDeviceParam(device.id, 'location', e.target.value)}
+                            value={deviceParams[device.instanceId]?.location || ''}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'location', e.target.value)}
                           />
                         </div>
 
                         <div>
-                          <label className="form-label" htmlFor={`enabled-${device.id}`} style={{ fontSize: '13px' }}>启用状态</label>
+                          <label className="form-label" htmlFor={`enabled-${device.instanceId}`} style={{ fontSize: '13px' }}>启用状态</label>
                           <select 
-                            id={`enabled-${device.id}`}
+                            id={`enabled-${device.instanceId}`}
                             className="form-select"
-                            value={deviceParams[device.id]?.enabled !== false ? 'true' : 'false'}
-                            onChange={(e) => updateDeviceParam(device.id, 'enabled', e.target.value === 'true')}
+                            value={deviceParams[device.instanceId]?.enabled !== false ? 'true' : 'false'}
+                            onChange={(e) => updateDeviceParam(device.instanceId, 'enabled', e.target.value === 'true')}
                           >
                             <option value="true">启用</option>
                             <option value="false">禁用</option>
                           </select>
                         </div>
                       </div>
-
-                      {/* 批量端口配置 - 针对多台设备 */}
-                      {device.quantity > 1 && (
-                        <div style={{ 
-                          marginTop: '20px', 
-                          paddingTop: '16px', 
-                          borderTop: '1px dashed var(--gray-300)' 
-                        }}>
-                          <div style={{ 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '8px',
-                            marginBottom: '12px'
-                          }}>
-                            <span style={{ fontSize: '14px', fontWeight: 500 }}>📋 批量端口配置</span>
-                            <span style={{ 
-                              fontSize: '12px', 
-                              color: 'var(--gray-500)',
-                              background: 'var(--gray-100)',
-                              padding: '2px 8px',
-                              borderRadius: '4px'
-                            }}>
-                              共 {device.quantity} 台设备
-                            </span>
-                          </div>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-                            <div>
-                              <label className="form-label" htmlFor={`batchStartIp-${device.id}`} style={{ fontSize: '12px' }}>起始IP</label>
-                              <input 
-                                id={`batchStartIp-${device.id}`}
-                                type="text" 
-                                className="form-input"
-                                placeholder="192.168.1.100"
-                                value={deviceParams[device.id]?.batchStartIp || ''}
-                                onChange={(e) => updateDeviceParam(device.id, 'batchStartIp', e.target.value)}
-                              />
-                            </div>
-                            <div>
-                              <label className="form-label" htmlFor={`batchPort-${device.id}`} style={{ fontSize: '12px' }}>端口</label>
-                              <input 
-                                id={`batchPort-${device.id}`}
-                                type="number" 
-                                className="form-input"
-                                placeholder="502"
-                                value={deviceParams[device.id]?.batchPort ?? ''}
-                                onChange={(e) => updateDeviceParam(device.id, 'batchPort', e.target.value, true)}
-                              />
-                            </div>
-                            <div>
-                              <label className="form-label" htmlFor={`batchStartSlaveId-${device.id}`} style={{ fontSize: '12px' }}>起始从站地址</label>
-                              <input 
-                                id={`batchStartSlaveId-${device.id}`}
-                                type="number" 
-                                className="form-input"
-                                min="1"
-                                max="247"
-                                placeholder="1"
-                                value={deviceParams[device.id]?.batchStartSlaveId ?? ''}
-                                onChange={(e) => updateDeviceParam(device.id, 'batchStartSlaveId', e.target.value, true)}
-                              />
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-                              <button 
-                                className="btn btn-primary btn-sm"
-                                onClick={() => {
-                                  const startIp = deviceParams[device.id]?.batchStartIp || '192.168.1.100';
-                                  const port = deviceParams[device.id]?.batchPort || 502;
-                                  const startSlave = parseInt(deviceParams[device.id]?.batchStartSlaveId, 10) || 1;
-                                  
-                                  // 验证IP地址格式
-                                  if (!isValidIp(startIp)) {
-                                    alert('请输入有效的IP地址格式，如: 192.168.1.100');
-                                    return;
-                                  }
-                                  
-                                  // 验证从站地址范围
-                                  const maxSlaveId = startSlave + device.quantity - 1;
-                                  if (maxSlaveId > 247) {
-                                    alert(`从站地址范围超限！起始地址 ${startSlave} + ${device.quantity} 台设备 = 最大地址 ${maxSlaveId}，超过Modbus限制(247)`);
-                                    return;
-                                  }
-                                  
-                                  // 自动生成设备实例配置
-                                  const instances = [];
-                                  const ipParts = startIp.split('.');
-                                  const baseIp = parseInt(ipParts[3], 10);
-                                  
-                                  // 检查IP地址范围
-                                  const maxIp = baseIp + device.quantity - 1;
-                                  if (maxIp > 254) {
-                                    alert(`IP地址范围超限！起始IP最后段 ${baseIp} + ${device.quantity} 台设备将超过254，部分设备将使用相同IP`);
-                                  }
-                                  
-                                  for (let i = 0; i < device.quantity; i++) {
-                                    const newLastOctet = Math.min(baseIp + i, 254);
-                                    const newIp = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}.${newLastOctet}`;
-                                    instances.push({
-                                      id: `${device.id}_inst_${i + 1}`,
-                                      index: i + 1,
-                                      ip: newIp,
-                                      port: port,
-                                      slaveId: startSlave + i,
-                                      alias: `${device.name}-${i + 1}`
-                                    });
-                                  }
-                                  
-                                  setDeviceParams(prev => ({
-                                    ...prev,
-                                    [device.id]: { 
-                                      ...(prev[device.id] || {}), 
-                                      instances: instances,
-                                      batchConfigured: true
-                                    }
-                                  }));
-                                }}
-                              >
-                                🔄 自动生成
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* 显示已生成的实例列表 */}
-                          {deviceParams[device.id]?.instances && (
-                            <div style={{ marginTop: '16px' }}>
-                              <div style={{ 
-                                maxHeight: '200px', 
-                                overflowY: 'auto',
-                                background: 'white',
-                                borderRadius: '8px',
-                                border: '1px solid var(--gray-200)'
-                              }}>
-                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                                  <thead style={{ background: 'var(--gray-100)', position: 'sticky', top: 0 }}>
-                                    <tr>
-                                      <th style={{ padding: '10px', textAlign: 'left' }}>序号</th>
-                                      <th style={{ padding: '10px', textAlign: 'left' }}>设备别名</th>
-                                      <th style={{ padding: '10px', textAlign: 'left' }}>IP地址</th>
-                                      <th style={{ padding: '10px', textAlign: 'left' }}>端口</th>
-                                      <th style={{ padding: '10px', textAlign: 'left' }}>从站地址</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {deviceParams[device.id].instances.map((inst) => (
-                                      <tr key={inst.id || `${device.id}_${inst.index}`} style={{ borderBottom: '1px solid var(--gray-100)' }}>
-                                        <td style={{ padding: '8px 10px' }}>{inst.index}</td>
-                                        <td style={{ padding: '8px 10px' }}>{inst.alias}</td>
-                                        <td style={{ padding: '8px 10px' }}>{inst.ip}</td>
-                                        <td style={{ padding: '8px 10px' }}>{inst.port}</td>
-                                        <td style={{ padding: '8px 10px' }}>{inst.slaveId}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                              <div style={{ 
-                                marginTop: '8px', 
-                                fontSize: '12px', 
-                                color: 'var(--success-color)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px'
-                              }}>
-                                ✅ 已为 {deviceParams[device.id].instances.length} 台设备自动生成通讯参数
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </div>
                   ))}
                 </div>
