@@ -2249,30 +2249,74 @@ function ProjectConfigWizard({ onNavigate }) {
 
                   <h4 style={{ marginBottom: '16px', color: 'var(--gray-700)' }}>调度模式选择</h4>
                   <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '20px' }}>
-                    选择调度模式后，系统将自动设置相应的目标权重（可在"目标权重"Tab中查看和调整）
+                    选择调度模式后，系统将自动配置所有相关策略参数（包括权重、SOC限制、功率限制、调度周期等）
                   </p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
                     {schedulingModes.map(mode => {
                       const isSelected = algorithmConfig.schedulingMode === mode.id;
-                      // 定义各模式对应的权重
-                      const modeWeights = {
-                        economic: { economic: 60, lifespan: 20, socBalance: 10, curtailmentMin: 10 },
-                        lifespan: { economic: 20, lifespan: 60, socBalance: 10, curtailmentMin: 10 },
-                        balanced: { economic: 25, lifespan: 25, socBalance: 25, curtailmentMin: 25 },
+                      // 定义各模式对应的完整策略参数配置
+                      const modeFullConfig = {
+                        economic: {
+                          weights: { economic: 60, lifespan: 20, socBalance: 10, curtailmentMin: 10 },
+                          socManagement: { minSoc: 10, maxSoc: 90, targetSoc: 50 },
+                          constraints: { socChargeMin: 10, socDischargeMax: 90, powerLimit: 100 },
+                          advanced: { schedulingPeriod: 15, predictionHorizon: 4, safetyMargin: 5, gridPeakShaving: true, loadFollowing: true },
+                          peakShaving: { enabled: true },
+                          demandControl: { enabled: true }
+                        },
+                        lifespan: {
+                          weights: { economic: 20, lifespan: 60, socBalance: 10, curtailmentMin: 10 },
+                          socManagement: { minSoc: 20, maxSoc: 80, targetSoc: 50 },
+                          constraints: { socChargeMin: 20, socDischargeMax: 80, powerLimit: 70 },
+                          advanced: { schedulingPeriod: 30, predictionHorizon: 2, safetyMargin: 10, gridPeakShaving: true, loadFollowing: false },
+                          peakShaving: { enabled: true },
+                          demandControl: { enabled: false }
+                        },
+                        balanced: {
+                          weights: { economic: 25, lifespan: 25, socBalance: 25, curtailmentMin: 25 },
+                          socManagement: { minSoc: 15, maxSoc: 85, targetSoc: 50 },
+                          constraints: { socChargeMin: 15, socDischargeMax: 85, powerLimit: 85 },
+                          advanced: { schedulingPeriod: 15, predictionHorizon: 4, safetyMargin: 5, gridPeakShaving: true, loadFollowing: true },
+                          peakShaving: { enabled: true },
+                          demandControl: { enabled: true }
+                        },
                         custom: null // 自定义不自动设置
                       };
+                      
+                      const config = modeFullConfig[mode.id];
                       
                       return (
                         <div
                           key={mode.id}
                           onClick={() => {
-                            const weights = modeWeights[mode.id];
-                            setAlgorithmConfig(prev => ({
-                              ...prev,
-                              schedulingMode: mode.id,
-                              // 如果不是自定义模式，自动设置权重
-                              ...(weights ? { weights } : {})
-                            }));
+                            if (config) {
+                              // 非自定义模式：设置所有相关参数
+                              setAlgorithmConfig(prev => ({
+                                ...prev,
+                                schedulingMode: mode.id,
+                                weights: config.weights,
+                                socManagement: { ...prev.socManagement, ...config.socManagement },
+                                constraints: { ...prev.constraints, ...config.constraints },
+                                advanced: { ...prev.advanced, ...config.advanced },
+                                peakShaving: { ...prev.peakShaving, ...config.peakShaving },
+                                demandControl: { ...prev.demandControl, ...config.demandControl }
+                              }));
+                              // 显示配置应用提示
+                              window.alert(`已应用"${mode.name}"模式配置:\n\n` +
+                                `• 权重: 经济${config.weights.economic}% / 寿命${config.weights.lifespan}%\n` +
+                                `• SOC范围: ${config.socManagement.minSoc}% - ${config.socManagement.maxSoc}%\n` +
+                                `• 功率限制: ${config.constraints.powerLimit}%\n` +
+                                `• 调度周期: ${config.advanced.schedulingPeriod}分钟\n` +
+                                `• 削峰填谷: ${config.peakShaving.enabled ? '开启' : '关闭'}\n` +
+                                `• 需量控制: ${config.demandControl.enabled ? '开启' : '关闭'}`
+                              );
+                            } else {
+                              // 自定义模式：只切换模式，不改变参数
+                              setAlgorithmConfig(prev => ({
+                                ...prev,
+                                schedulingMode: mode.id
+                              }));
+                            }
                           }}
                           style={{
                             padding: '24px',
@@ -2322,8 +2366,8 @@ function ProjectConfigWizard({ onNavigate }) {
                           <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginTop: '4px' }}>
                             {mode.description}
                           </div>
-                          {/* 权重预览 */}
-                          {modeWeights[mode.id] && (
+                          {/* 参数预览 */}
+                          {config && (
                             <div style={{ 
                               marginTop: '12px', 
                               padding: '8px', 
@@ -2332,9 +2376,8 @@ function ProjectConfigWizard({ onNavigate }) {
                               fontSize: '11px',
                               color: 'var(--gray-600)'
                             }}>
-                              经济{modeWeights[mode.id].economic}% · 
-                              寿命{modeWeights[mode.id].lifespan}% · 
-                              SOC{modeWeights[mode.id].socBalance}%
+                              <div>SOC: {config.socManagement.minSoc}%-{config.socManagement.maxSoc}%</div>
+                              <div>功率: {config.constraints.powerLimit}% · 周期: {config.advanced.schedulingPeriod}分钟</div>
                             </div>
                           )}
                           {mode.id === 'custom' && (
@@ -2354,7 +2397,7 @@ function ProjectConfigWizard({ onNavigate }) {
                     })}
                   </div>
                   
-                  {/* 当前权重显示 */}
+                  {/* 当前策略配置总览 */}
                   <div style={{
                     marginTop: '24px',
                     padding: '16px',
@@ -2363,7 +2406,7 @@ function ProjectConfigWizard({ onNavigate }) {
                     border: '1px solid var(--gray-200)'
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-                      <h5 style={{ margin: 0, color: 'var(--gray-700)', fontSize: '14px' }}>当前权重配置</h5>
+                      <h5 style={{ margin: 0, color: 'var(--gray-700)', fontSize: '14px' }}>当前策略配置总览</h5>
                       <span style={{ 
                         fontSize: '12px', 
                         color: algorithmConfig.schedulingMode === 'custom' ? '#1976d2' : '#2e7d32',
@@ -2372,22 +2415,50 @@ function ProjectConfigWizard({ onNavigate }) {
                         {schedulingModes.find(m => m.id === algorithmConfig.schedulingMode)?.name || '未选择'}
                       </span>
                     </div>
-                    <div style={{ display: 'flex', gap: '16px' }}>
-                      <div style={{ flex: 1, padding: '10px', background: '#e8f5e9', borderRadius: '6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '20px', fontWeight: '600', color: '#2e7d32' }}>{algorithmConfig.weights.economic}%</div>
-                        <div style={{ fontSize: '11px', color: '#388e3c' }}>经济性</div>
+                    {/* 权重配置 */}
+                    <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                      <div style={{ flex: 1, padding: '8px', background: '#e8f5e9', borderRadius: '6px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '600', color: '#2e7d32' }}>{algorithmConfig.weights.economic}%</div>
+                        <div style={{ fontSize: '10px', color: '#388e3c' }}>经济性</div>
                       </div>
-                      <div style={{ flex: 1, padding: '10px', background: '#e3f2fd', borderRadius: '6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '20px', fontWeight: '600', color: '#1565c0' }}>{algorithmConfig.weights.lifespan}%</div>
-                        <div style={{ fontSize: '11px', color: '#1976d2' }}>寿命</div>
+                      <div style={{ flex: 1, padding: '8px', background: '#e3f2fd', borderRadius: '6px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '600', color: '#1565c0' }}>{algorithmConfig.weights.lifespan}%</div>
+                        <div style={{ fontSize: '10px', color: '#1976d2' }}>寿命</div>
                       </div>
-                      <div style={{ flex: 1, padding: '10px', background: '#f3e5f5', borderRadius: '6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '20px', fontWeight: '600', color: '#7b1fa2' }}>{algorithmConfig.weights.socBalance}%</div>
-                        <div style={{ fontSize: '11px', color: '#8e24aa' }}>SOC协同</div>
+                      <div style={{ flex: 1, padding: '8px', background: '#f3e5f5', borderRadius: '6px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '600', color: '#7b1fa2' }}>{algorithmConfig.weights.socBalance}%</div>
+                        <div style={{ fontSize: '10px', color: '#8e24aa' }}>SOC协同</div>
                       </div>
-                      <div style={{ flex: 1, padding: '10px', background: '#fff3e0', borderRadius: '6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: '20px', fontWeight: '600', color: '#e65100' }}>{algorithmConfig.weights.curtailmentMin}%</div>
-                        <div style={{ fontSize: '11px', color: '#f57c00' }}>弃电最小化</div>
+                      <div style={{ flex: 1, padding: '8px', background: '#fff3e0', borderRadius: '6px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '16px', fontWeight: '600', color: '#e65100' }}>{algorithmConfig.weights.curtailmentMin}%</div>
+                        <div style={{ fontSize: '10px', color: '#f57c00' }}>弃电最小</div>
+                      </div>
+                    </div>
+                    {/* 核心参数配置 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px', fontSize: '12px' }}>
+                      <div style={{ padding: '8px', background: 'white', borderRadius: '6px', border: '1px solid var(--gray-200)' }}>
+                        <div style={{ color: 'var(--gray-500)' }}>SOC范围</div>
+                        <div style={{ fontWeight: '600', color: 'var(--gray-800)' }}>
+                          {algorithmConfig.socManagement.minSoc}% - {algorithmConfig.socManagement.maxSoc}%
+                        </div>
+                      </div>
+                      <div style={{ padding: '8px', background: 'white', borderRadius: '6px', border: '1px solid var(--gray-200)' }}>
+                        <div style={{ color: 'var(--gray-500)' }}>调度周期</div>
+                        <div style={{ fontWeight: '600', color: 'var(--gray-800)' }}>
+                          {algorithmConfig.advanced.schedulingPeriod}分钟
+                        </div>
+                      </div>
+                      <div style={{ padding: '8px', background: 'white', borderRadius: '6px', border: '1px solid var(--gray-200)' }}>
+                        <div style={{ color: 'var(--gray-500)' }}>削峰填谷</div>
+                        <div style={{ fontWeight: '600', color: algorithmConfig.peakShaving.enabled ? '#2e7d32' : '#d32f2f' }}>
+                          {algorithmConfig.peakShaving.enabled ? '✓ 开启' : '✗ 关闭'}
+                        </div>
+                      </div>
+                      <div style={{ padding: '8px', background: 'white', borderRadius: '6px', border: '1px solid var(--gray-200)' }}>
+                        <div style={{ color: 'var(--gray-500)' }}>需量控制</div>
+                        <div style={{ fontWeight: '600', color: algorithmConfig.demandControl.enabled ? '#2e7d32' : '#d32f2f' }}>
+                          {algorithmConfig.demandControl.enabled ? '✓ 开启' : '✗ 关闭'}
+                        </div>
                       </div>
                     </div>
                   </div>
