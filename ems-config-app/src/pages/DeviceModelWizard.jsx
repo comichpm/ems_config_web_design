@@ -1628,13 +1628,13 @@ function DeviceModelWizard({ onNavigate }) {
                 </div>
               </div>
 
-              {/* 虚拟点配置 */}
+              {/* 虚拟点配置 - 增强版可视化公式构建器 */}
               <div className="param-card">
                 <div className="param-card-title">
                   <span>🔮</span> 虚拟点配置
                 </div>
                 <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '16px' }}>
-                  虚拟点通过计算公式从物理点派生，用于计算综合指标
+                  虚拟点通过计算公式从物理点派生，用于计算综合指标。<strong>点击下方点位可自动插入到公式中。</strong>
                 </p>
 
                 <div style={{ marginBottom: '16px' }}>
@@ -1667,7 +1667,7 @@ function DeviceModelWizard({ onNavigate }) {
                   </div>
                 ) : (
                   <div>
-                    {formData.virtualPoints.map((vp, index) => (
+                    {formData.virtualPoints.map((vp, vpIndex) => (
                       <div key={vp.id} style={{
                         border: '1px solid var(--gray-200)',
                         borderRadius: '8px',
@@ -1676,11 +1676,11 @@ function DeviceModelWizard({ onNavigate }) {
                         background: 'white'
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                          <span style={{ fontWeight: '600' }}>虚拟点 {index + 1}</span>
+                          <span style={{ fontWeight: '600' }}>虚拟点 {vpIndex + 1}</span>
                           <button 
                             className="btn btn-sm btn-danger"
                             onClick={() => {
-                              const newVPs = formData.virtualPoints.filter((_, i) => i !== index);
+                              const newVPs = formData.virtualPoints.filter((_, i) => i !== vpIndex);
                               updateFormData('virtualPoints', newVPs);
                             }}
                           >
@@ -1694,7 +1694,7 @@ function DeviceModelWizard({ onNavigate }) {
                               type="text"
                               className="form-input"
                               value={vp.name}
-                              onChange={(e) => handleUpdateVirtualPoint(index, 'name', e.target.value)}
+                              onChange={(e) => handleUpdateVirtualPoint(vpIndex, 'name', e.target.value)}
                               placeholder="如：系统总功率"
                             />
                           </div>
@@ -1704,21 +1704,253 @@ function DeviceModelWizard({ onNavigate }) {
                               type="text"
                               className="form-input"
                               value={vp.unit}
-                              onChange={(e) => handleUpdateVirtualPoint(index, 'unit', e.target.value)}
+                              onChange={(e) => handleUpdateVirtualPoint(vpIndex, 'unit', e.target.value)}
                               placeholder="如：kW"
                             />
                           </div>
                         </div>
-                        <div className="form-group" style={{ marginBottom: 0, marginTop: '12px' }}>
-                          <label className="form-label">计算公式</label>
-                          <input
-                            type="text"
-                            className="form-input"
-                            value={vp.formula}
-                            onChange={(e) => handleUpdateVirtualPoint(index, 'formula', e.target.value)}
-                            placeholder="如：SUM(pcs_power) + SUM(inverter_power)"
-                          />
-                          <div className="form-hint">支持: SUM, AVG, MAX, MIN, +, -, *, / 等运算</div>
+
+                        {/* 可视化公式构建器 */}
+                        <div style={{ marginTop: '16px', border: '1px solid var(--primary-100)', borderRadius: '8px', padding: '12px', background: 'var(--primary-50)' }}>
+                          <label className="form-label" style={{ color: 'var(--primary-700)', fontWeight: '600' }}>
+                            📐 可视化公式构建器
+                          </label>
+                          
+                          {/* 公式输入框 */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <textarea
+                              className="form-input"
+                              rows={2}
+                              value={vp.formula}
+                              onChange={(e) => handleUpdateVirtualPoint(vpIndex, 'formula', e.target.value)}
+                              placeholder="点击下方点位和运算符自动插入，或直接输入公式"
+                              style={{ fontFamily: 'monospace', fontSize: '14px' }}
+                            />
+                          </div>
+
+                          {/* 当前物模型点表选择 */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray-600)', marginBottom: '6px' }}>
+                              📋 当前物模型点表 <span style={{ color: 'var(--gray-400)' }}>(点击插入)</span>
+                            </div>
+                            {customPointTable.length === 0 ? (
+                              <div style={{ fontSize: '12px', color: 'var(--warning-600)', background: 'var(--warning-50)', padding: '8px', borderRadius: '4px' }}>
+                                ⚠️ 请先在"协议&通道"步骤中配置点表
+                              </div>
+                            ) : (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {customPointTable.map((point) => (
+                                  <button
+                                    key={point.name}
+                                    type="button"
+                                    onClick={() => {
+                                      const newFormula = (vp.formula || '') + `{${point.name}}`;
+                                      handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
+                                    }}
+                                    style={{
+                                      padding: '4px 8px',
+                                      fontSize: '11px',
+                                      background: 'white',
+                                      border: '1px solid var(--primary-300)',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      color: 'var(--primary-700)'
+                                    }}
+                                    title={`${point.description || point.name} (${point.type})`}
+                                  >
+                                    {point.name}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 跨物模型点表选择 */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray-600)', marginBottom: '6px' }}>
+                              🔗 跨物模型点表 <span style={{ color: 'var(--gray-400)' }}>(选择其他物模型的点位)</span>
+                            </div>
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                              <select 
+                                className="form-select"
+                                style={{ width: '150px', fontSize: '12px' }}
+                                value={vp.selectedCrossModel || ''}
+                                onChange={(e) => handleUpdateVirtualPoint(vpIndex, 'selectedCrossModel', e.target.value)}
+                              >
+                                <option value="">选择物模型...</option>
+                                <option value="BMS_Model">BMS物模型</option>
+                                <option value="PCS_Model">PCS物模型</option>
+                                <option value="Meter_Model">电表物模型</option>
+                                <option value="Inverter_Model">逆变器物模型</option>
+                              </select>
+                              {vp.selectedCrossModel && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
+                                  {/* 模拟其他物模型的点表 */}
+                                  {vp.selectedCrossModel === 'BMS_Model' && ['pack_voltage', 'pack_current', 'soc', 'soh', 'max_cell_temp', 'min_cell_temp'].map(pt => (
+                                    <button
+                                      key={pt}
+                                      type="button"
+                                      onClick={() => {
+                                        const newFormula = (vp.formula || '') + `{${vp.selectedCrossModel}.${pt}}`;
+                                        handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
+                                      }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        fontSize: '11px',
+                                        background: 'var(--success-50)',
+                                        border: '1px solid var(--success-300)',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        color: 'var(--success-700)'
+                                      }}
+                                    >
+                                      {pt}
+                                    </button>
+                                  ))}
+                                  {vp.selectedCrossModel === 'PCS_Model' && ['dc_voltage', 'dc_current', 'ac_power', 'efficiency', 'running_state'].map(pt => (
+                                    <button
+                                      key={pt}
+                                      type="button"
+                                      onClick={() => {
+                                        const newFormula = (vp.formula || '') + `{${vp.selectedCrossModel}.${pt}}`;
+                                        handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
+                                      }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        fontSize: '11px',
+                                        background: 'var(--success-50)',
+                                        border: '1px solid var(--success-300)',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        color: 'var(--success-700)'
+                                      }}
+                                    >
+                                      {pt}
+                                    </button>
+                                  ))}
+                                  {vp.selectedCrossModel === 'Meter_Model' && ['active_power', 'reactive_power', 'voltage_a', 'voltage_b', 'voltage_c', 'current_a', 'current_b', 'current_c', 'power_factor', 'frequency'].map(pt => (
+                                    <button
+                                      key={pt}
+                                      type="button"
+                                      onClick={() => {
+                                        const newFormula = (vp.formula || '') + `{${vp.selectedCrossModel}.${pt}}`;
+                                        handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
+                                      }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        fontSize: '11px',
+                                        background: 'var(--success-50)',
+                                        border: '1px solid var(--success-300)',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        color: 'var(--success-700)'
+                                      }}
+                                    >
+                                      {pt}
+                                    </button>
+                                  ))}
+                                  {vp.selectedCrossModel === 'Inverter_Model' && ['dc_power', 'ac_power', 'mppt1_voltage', 'mppt1_current', 'mppt2_voltage', 'mppt2_current', 'efficiency', 'daily_energy'].map(pt => (
+                                    <button
+                                      key={pt}
+                                      type="button"
+                                      onClick={() => {
+                                        const newFormula = (vp.formula || '') + `{${vp.selectedCrossModel}.${pt}}`;
+                                        handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
+                                      }}
+                                      style={{
+                                        padding: '4px 8px',
+                                        fontSize: '11px',
+                                        background: 'var(--success-50)',
+                                        border: '1px solid var(--success-300)',
+                                        borderRadius: '4px',
+                                        cursor: 'pointer',
+                                        color: 'var(--success-700)'
+                                      }}
+                                    >
+                                      {pt}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 运算符面板 */}
+                          <div style={{ marginBottom: '12px' }}>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray-600)', marginBottom: '6px' }}>
+                              ⚙️ 运算符 <span style={{ color: 'var(--gray-400)' }}>(点击插入)</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                              {['+', '-', '*', '/', '%', '^', '(', ')', '>', '<', '>=', '<=', '==', '!=', '&&', '||', '!', '?', ':'].map(op => (
+                                <button
+                                  key={op}
+                                  type="button"
+                                  onClick={() => {
+                                    const newFormula = (vp.formula || '') + ` ${op} `;
+                                    handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
+                                  }}
+                                  style={{
+                                    padding: '4px 10px',
+                                    fontSize: '12px',
+                                    background: 'var(--gray-100)',
+                                    border: '1px solid var(--gray-300)',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    fontFamily: 'monospace',
+                                    fontWeight: '600'
+                                  }}
+                                >
+                                  {op}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* 公式模板 */}
+                          <div>
+                            <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray-600)', marginBottom: '6px' }}>
+                              📝 公式模板 <span style={{ color: 'var(--gray-400)' }}>(一键插入常用公式)</span>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {[
+                                { label: 'SUM求和', template: 'SUM({点1}, {点2})' },
+                                { label: 'AVG平均', template: 'AVG({点1}, {点2})' },
+                                { label: 'MAX最大', template: 'MAX({点1}, {点2})' },
+                                { label: 'MIN最小', template: 'MIN({点1}, {点2})' },
+                                { label: 'IF条件', template: 'IF({条件}, {真值}, {假值})' },
+                                { label: 'ABS绝对值', template: 'ABS({点})' },
+                                { label: 'ROUND四舍五入', template: 'ROUND({点}, 2)' }
+                              ].map(t => (
+                                <button
+                                  key={t.label}
+                                  type="button"
+                                  onClick={() => {
+                                    const newFormula = (vp.formula || '') + t.template;
+                                    handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
+                                  }}
+                                  style={{
+                                    padding: '4px 8px',
+                                    fontSize: '11px',
+                                    background: 'var(--info-50)',
+                                    border: '1px solid var(--info-300)',
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    color: 'var(--info-700)'
+                                  }}
+                                >
+                                  {t.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 公式示例 */}
+                        <div style={{ marginTop: '12px', fontSize: '12px', color: 'var(--gray-500)', background: 'var(--gray-50)', padding: '8px', borderRadius: '4px' }}>
+                          <strong>公式示例：</strong><br/>
+                          • 简单计算: <code>{'{pack_voltage}'} * {'{pack_current}'}</code><br/>
+                          • 跨物模型: <code>{'{BMS_Model.soc}'} + {'{PCS_Model.ac_power}'}</code><br/>
+                          • 条件判断: <code>IF({'{soc}'} {'>'} 80, 0, {'{max_power}'})</code>
                         </div>
                       </div>
                     ))}
