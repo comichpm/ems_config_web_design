@@ -19,11 +19,11 @@ import {
 // 7步引导流程 - 恢复北向配置
 const STEPS = [
   { id: 1, name: '项目信息' },
-  { id: 2, name: '场景模板' },
-  { id: 3, name: '设备实例' },
-  { id: 4, name: '电气拓扑' },
-  { id: 5, name: '算法策略' },
-  { id: 6, name: '告警规则' },
+  { id: 2, name: '场景选择' },
+  { id: 3, name: '设备选择' },
+  { id: 4, name: '参数微调' },
+  { id: 5, name: '电气拓扑' },
+  { id: 6, name: '算法策略' },
   { id: 7, name: '北向配置' }
 ];
 
@@ -161,12 +161,12 @@ function ProjectConfigWizard({ onNavigate }) {
   // 设备参数微调
   const [deviceParams, setDeviceParams] = useState({});
 
-  // 步骤4: 拓扑节点和边
+  // 步骤5: 拓扑节点和边
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [isTopologyFullscreen, setIsTopologyFullscreen] = useState(false);
 
-  // 步骤5: 算法策略配置 - 综合Tab式设计（保留所有功能）
+  // 步骤6: 算法策略配置 - 综合Tab式设计（保留所有功能）
   const [algorithmTab, setAlgorithmTab] = useState('mode'); // mode, weight, peakValley, integration, advanced
   const [algorithmConfig, setAlgorithmConfig] = useState({
     // 调度模式
@@ -271,7 +271,7 @@ function ProjectConfigWizard({ onNavigate }) {
     }
   });
 
-  // 步骤6: 告警规则配置
+  // 告警规则配置 (保留供未来扩展)
   const [alarmRules, setAlarmRules] = useState(presetAlarmRules);
   const [showAddAlarmModal, setShowAddAlarmModal] = useState(false);
   const [newAlarmRule, setNewAlarmRule] = useState({
@@ -366,6 +366,28 @@ function ProjectConfigWizard({ onNavigate }) {
         schedulingMode: template.recommendedAlgorithm
       }));
     }
+  };
+
+  // 设备参数更新辅助函数
+  const updateDeviceParam = (deviceId, field, value, isNumeric = false) => {
+    setDeviceParams(prev => ({
+      ...prev,
+      [deviceId]: {
+        ...(prev[deviceId] || {}),
+        [field]: isNumeric ? (value === '' ? '' : parseInt(value, 10) || 0) : value
+      }
+    }));
+  };
+
+  // 验证IP地址格式
+  const isValidIp = (ip) => {
+    if (!ip) return false;
+    const parts = ip.split('.');
+    if (parts.length !== 4) return false;
+    return parts.every(part => {
+      const num = parseInt(part, 10);
+      return !isNaN(num) && num >= 0 && num <= 255 && String(num) === part;
+    });
   };
 
   // 添加单个设备实例
@@ -1238,8 +1260,356 @@ function ProjectConfigWizard({ onNavigate }) {
             </div>
           )}
 
-          {/* 步骤4: 电气拓扑 */}
+          {/* 步骤4: 参数微调 */}
           {currentStep === 4 && (
+            <div className="form-section">
+              <div className="form-section-header">
+                <span className="form-section-icon">🔧</span>
+                <div>
+                  <h3 className="form-section-title">设备参数微调</h3>
+                  <p className="form-section-desc">根据现场实际情况，微调选中设备的通讯参数和业务参数</p>
+                </div>
+              </div>
+
+              {deviceModels.length === 0 ? (
+                <div style={{ 
+                  padding: '60px 20px', 
+                  textAlign: 'center', 
+                  color: 'var(--gray-500)',
+                  background: 'var(--gray-50)',
+                  borderRadius: '12px'
+                }}>
+                  <div style={{ fontSize: '48px', marginBottom: '16px' }}>📋</div>
+                  <div>请先在"设备选择"步骤中选择需要配置的设备</div>
+                </div>
+              ) : (
+                <div>
+                  {deviceModels.map((device) => (
+                    <div key={device.id} style={{ 
+                      marginBottom: '24px', 
+                      background: 'var(--gray-50)', 
+                      borderRadius: '12px', 
+                      padding: '20px',
+                      border: '1px solid var(--gray-200)'
+                    }}>
+                      <div style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '12px', 
+                        marginBottom: '20px',
+                        paddingBottom: '16px',
+                        borderBottom: '1px solid var(--gray-200)'
+                      }}>
+                        <span style={{ fontSize: '24px' }}>{device.icon}</span>
+                        <div>
+                          <h4 style={{ margin: 0, color: 'var(--gray-800)' }}>{device.name}</h4>
+                          <span style={{ fontSize: '13px', color: 'var(--gray-500)' }}>
+                            数量: {device.quantity} 台 | 类型: {device.type}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                        {/* 通讯参数 */}
+                        <div>
+                          <label className="form-label" htmlFor={`protocol-${device.id}`} style={{ fontSize: '13px' }}>通讯协议</label>
+                          <select 
+                            id={`protocol-${device.id}`}
+                            className="form-select"
+                            value={deviceParams[device.id]?.protocol || 'modbus_tcp'}
+                            onChange={(e) => updateDeviceParam(device.id, 'protocol', e.target.value)}
+                          >
+                            <option value="modbus_tcp">Modbus TCP</option>
+                            <option value="modbus_rtu">Modbus RTU</option>
+                            <option value="iec104">IEC 104</option>
+                            <option value="iec61850">IEC 61850</option>
+                            <option value="can">CAN总线</option>
+                            <option value="dlt645">DL/T 645</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="form-label" htmlFor={`address-${device.id}`} style={{ fontSize: '13px' }}>IP地址/端口</label>
+                          <input 
+                            id={`address-${device.id}`}
+                            type="text" 
+                            className="form-input"
+                            placeholder="192.168.1.100:502"
+                            value={deviceParams[device.id]?.address || ''}
+                            onChange={(e) => updateDeviceParam(device.id, 'address', e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="form-label" htmlFor={`slaveId-${device.id}`} style={{ fontSize: '13px' }}>从站地址</label>
+                          <input 
+                            id={`slaveId-${device.id}`}
+                            type="number" 
+                            className="form-input"
+                            min="1"
+                            max="247"
+                            placeholder="1"
+                            value={deviceParams[device.id]?.slaveId ?? ''}
+                            onChange={(e) => updateDeviceParam(device.id, 'slaveId', e.target.value, true)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="form-label" htmlFor={`pollInterval-${device.id}`} style={{ fontSize: '13px' }}>轮询周期(ms)</label>
+                          <input 
+                            id={`pollInterval-${device.id}`}
+                            type="number" 
+                            className="form-input"
+                            min="100"
+                            step="100"
+                            placeholder="1000"
+                            value={deviceParams[device.id]?.pollInterval ?? ''}
+                            onChange={(e) => updateDeviceParam(device.id, 'pollInterval', e.target.value, true)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="form-label" htmlFor={`timeout-${device.id}`} style={{ fontSize: '13px' }}>超时时间(ms)</label>
+                          <input 
+                            id={`timeout-${device.id}`}
+                            type="number" 
+                            className="form-input"
+                            min="100"
+                            step="100"
+                            placeholder="3000"
+                            value={deviceParams[device.id]?.timeout ?? ''}
+                            onChange={(e) => updateDeviceParam(device.id, 'timeout', e.target.value, true)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="form-label" htmlFor={`retryCount-${device.id}`} style={{ fontSize: '13px' }}>重试次数</label>
+                          <input 
+                            id={`retryCount-${device.id}`}
+                            type="number" 
+                            className="form-input"
+                            min="0"
+                            max="10"
+                            placeholder="3"
+                            value={deviceParams[device.id]?.retryCount ?? ''}
+                            onChange={(e) => updateDeviceParam(device.id, 'retryCount', e.target.value, true)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="form-label" htmlFor={`alias-${device.id}`} style={{ fontSize: '13px' }}>设备别名</label>
+                          <input 
+                            id={`alias-${device.id}`}
+                            type="text" 
+                            className="form-input"
+                            placeholder="输入设备别名"
+                            value={deviceParams[device.id]?.alias || ''}
+                            onChange={(e) => updateDeviceParam(device.id, 'alias', e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="form-label" htmlFor={`location-${device.id}`} style={{ fontSize: '13px' }}>安装位置</label>
+                          <input 
+                            id={`location-${device.id}`}
+                            type="text" 
+                            className="form-input"
+                            placeholder="如: 1#配电室"
+                            value={deviceParams[device.id]?.location || ''}
+                            onChange={(e) => updateDeviceParam(device.id, 'location', e.target.value)}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="form-label" htmlFor={`enabled-${device.id}`} style={{ fontSize: '13px' }}>启用状态</label>
+                          <select 
+                            id={`enabled-${device.id}`}
+                            className="form-select"
+                            value={deviceParams[device.id]?.enabled !== false ? 'true' : 'false'}
+                            onChange={(e) => updateDeviceParam(device.id, 'enabled', e.target.value === 'true')}
+                          >
+                            <option value="true">启用</option>
+                            <option value="false">禁用</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* 批量端口配置 - 针对多台设备 */}
+                      {device.quantity > 1 && (
+                        <div style={{ 
+                          marginTop: '20px', 
+                          paddingTop: '16px', 
+                          borderTop: '1px dashed var(--gray-300)' 
+                        }}>
+                          <div style={{ 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '8px',
+                            marginBottom: '12px'
+                          }}>
+                            <span style={{ fontSize: '14px', fontWeight: 500 }}>📋 批量端口配置</span>
+                            <span style={{ 
+                              fontSize: '12px', 
+                              color: 'var(--gray-500)',
+                              background: 'var(--gray-100)',
+                              padding: '2px 8px',
+                              borderRadius: '4px'
+                            }}>
+                              共 {device.quantity} 台设备
+                            </span>
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                            <div>
+                              <label className="form-label" htmlFor={`batchStartIp-${device.id}`} style={{ fontSize: '12px' }}>起始IP</label>
+                              <input 
+                                id={`batchStartIp-${device.id}`}
+                                type="text" 
+                                className="form-input"
+                                placeholder="192.168.1.100"
+                                value={deviceParams[device.id]?.batchStartIp || ''}
+                                onChange={(e) => updateDeviceParam(device.id, 'batchStartIp', e.target.value)}
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label" htmlFor={`batchPort-${device.id}`} style={{ fontSize: '12px' }}>端口</label>
+                              <input 
+                                id={`batchPort-${device.id}`}
+                                type="number" 
+                                className="form-input"
+                                placeholder="502"
+                                value={deviceParams[device.id]?.batchPort ?? ''}
+                                onChange={(e) => updateDeviceParam(device.id, 'batchPort', e.target.value, true)}
+                              />
+                            </div>
+                            <div>
+                              <label className="form-label" htmlFor={`batchStartSlaveId-${device.id}`} style={{ fontSize: '12px' }}>起始从站地址</label>
+                              <input 
+                                id={`batchStartSlaveId-${device.id}`}
+                                type="number" 
+                                className="form-input"
+                                min="1"
+                                max="247"
+                                placeholder="1"
+                                value={deviceParams[device.id]?.batchStartSlaveId ?? ''}
+                                onChange={(e) => updateDeviceParam(device.id, 'batchStartSlaveId', e.target.value, true)}
+                              />
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                              <button 
+                                className="btn btn-primary btn-sm"
+                                onClick={() => {
+                                  const startIp = deviceParams[device.id]?.batchStartIp || '192.168.1.100';
+                                  const port = deviceParams[device.id]?.batchPort || 502;
+                                  const startSlave = parseInt(deviceParams[device.id]?.batchStartSlaveId, 10) || 1;
+                                  
+                                  // 验证IP地址格式
+                                  if (!isValidIp(startIp)) {
+                                    alert('请输入有效的IP地址格式，如: 192.168.1.100');
+                                    return;
+                                  }
+                                  
+                                  // 验证从站地址范围
+                                  const maxSlaveId = startSlave + device.quantity - 1;
+                                  if (maxSlaveId > 247) {
+                                    alert(`从站地址范围超限！起始地址 ${startSlave} + ${device.quantity} 台设备 = 最大地址 ${maxSlaveId}，超过Modbus限制(247)`);
+                                    return;
+                                  }
+                                  
+                                  // 自动生成设备实例配置
+                                  const instances = [];
+                                  const ipParts = startIp.split('.');
+                                  const baseIp = parseInt(ipParts[3], 10);
+                                  
+                                  // 检查IP地址范围
+                                  const maxIp = baseIp + device.quantity - 1;
+                                  if (maxIp > 254) {
+                                    alert(`IP地址范围超限！起始IP最后段 ${baseIp} + ${device.quantity} 台设备将超过254，部分设备将使用相同IP`);
+                                  }
+                                  
+                                  for (let i = 0; i < device.quantity; i++) {
+                                    const newLastOctet = Math.min(baseIp + i, 254);
+                                    const newIp = `${ipParts[0]}.${ipParts[1]}.${ipParts[2]}.${newLastOctet}`;
+                                    instances.push({
+                                      id: `${device.id}_inst_${i + 1}`,
+                                      index: i + 1,
+                                      ip: newIp,
+                                      port: port,
+                                      slaveId: startSlave + i,
+                                      alias: `${device.name}-${i + 1}`
+                                    });
+                                  }
+                                  
+                                  setDeviceParams(prev => ({
+                                    ...prev,
+                                    [device.id]: { 
+                                      ...(prev[device.id] || {}), 
+                                      instances: instances,
+                                      batchConfigured: true
+                                    }
+                                  }));
+                                }}
+                              >
+                                🔄 自动生成
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* 显示已生成的实例列表 */}
+                          {deviceParams[device.id]?.instances && (
+                            <div style={{ marginTop: '16px' }}>
+                              <div style={{ 
+                                maxHeight: '200px', 
+                                overflowY: 'auto',
+                                background: 'white',
+                                borderRadius: '8px',
+                                border: '1px solid var(--gray-200)'
+                              }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                                  <thead style={{ background: 'var(--gray-100)', position: 'sticky', top: 0 }}>
+                                    <tr>
+                                      <th style={{ padding: '10px', textAlign: 'left' }}>序号</th>
+                                      <th style={{ padding: '10px', textAlign: 'left' }}>设备别名</th>
+                                      <th style={{ padding: '10px', textAlign: 'left' }}>IP地址</th>
+                                      <th style={{ padding: '10px', textAlign: 'left' }}>端口</th>
+                                      <th style={{ padding: '10px', textAlign: 'left' }}>从站地址</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {deviceParams[device.id].instances.map((inst) => (
+                                      <tr key={inst.id || `${device.id}_${inst.index}`} style={{ borderBottom: '1px solid var(--gray-100)' }}>
+                                        <td style={{ padding: '8px 10px' }}>{inst.index}</td>
+                                        <td style={{ padding: '8px 10px' }}>{inst.alias}</td>
+                                        <td style={{ padding: '8px 10px' }}>{inst.ip}</td>
+                                        <td style={{ padding: '8px 10px' }}>{inst.port}</td>
+                                        <td style={{ padding: '8px 10px' }}>{inst.slaveId}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div style={{ 
+                                marginTop: '8px', 
+                                fontSize: '12px', 
+                                color: 'var(--success-color)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}>
+                                ✅ 已为 {deviceParams[device.id].instances.length} 台设备自动生成通讯参数
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 步骤5: 电气拓扑 */}
+          {currentStep === 5 && (
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                 <div className="form-section-header" style={{ marginBottom: 0 }}>
@@ -1392,8 +1762,8 @@ function ProjectConfigWizard({ onNavigate }) {
             </div>
           )}
 
-          {/* 步骤5: 算法策略配置 - 完全按照参考图的Tab式设计 */}
-          {currentStep === 5 && (
+          {/* 步骤6: 算法策略配置 - 完全按照参考图的Tab式设计 */}
+          {currentStep === 6 && (
             <div>
               <div className="form-section">
                 <div className="form-section-header">
@@ -2548,236 +2918,6 @@ function ProjectConfigWizard({ onNavigate }) {
             </div>
           )}
 
-          {/* 步骤6: 告警规则配置 */}
-          {currentStep === 6 && (
-            <div>
-              <div className="form-section">
-                <div className="form-section-header">
-                  <span className="form-section-icon">🔔</span>
-                  <div>
-                    <h3 className="form-section-title">告警规则配置</h3>
-                    <p className="form-section-desc">配置设备告警规则，系统会在触发条件时发出告警通知</p>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                <div style={{ fontSize: '14px', color: 'var(--gray-600)' }}>
-                  已配置 {alarmRules.length} 条规则，{alarmRules.filter(r => r.enabled).length} 条已启用
-                </div>
-                <button 
-                  className="btn btn-primary"
-                  onClick={() => setShowAddAlarmModal(true)}
-                >
-                  ➕ 新增告警规则
-                </button>
-              </div>
-
-              {/* 告警规则列表 */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                {alarmRules.map(rule => (
-                  <div 
-                    key={rule.id}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      padding: '16px',
-                      background: 'white',
-                      border: '1px solid var(--gray-200)',
-                      borderRadius: '8px',
-                      gap: '16px'
-                    }}
-                  >
-                    {/* 告警等级标识 */}
-                    <div style={{
-                      width: '8px',
-                      height: '40px',
-                      borderRadius: '4px',
-                      background: alarmLevels.find(l => l.id === rule.level)?.color || '#3b82f6'
-                    }} />
-                    
-                    {/* 规则信息 */}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ 
-                        fontWeight: '500', 
-                        marginBottom: '4px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}>
-                        {rule.name}
-                        <span style={{
-                          fontSize: '11px',
-                          padding: '2px 8px',
-                          borderRadius: '4px',
-                          background: hexToRgba(alarmLevels.find(l => l.id === rule.level)?.color, 0.15),
-                          color: alarmLevels.find(l => l.id === rule.level)?.color
-                        }}>
-                          {alarmLevels.find(l => l.id === rule.level)?.name}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '13px', color: 'var(--gray-500)' }}>
-                        触发条件: {rule.condition}
-                      </div>
-                    </div>
-
-                    {/* 启用开关 */}
-                    <label style={{ position: 'relative', display: 'inline-block', width: '48px', height: '24px' }}>
-                      <input
-                        type="checkbox"
-                        checked={rule.enabled}
-                        onChange={() => handleToggleAlarmRule(rule.id)}
-                        style={{ opacity: 0, width: 0, height: 0 }}
-                      />
-                      <span style={{
-                        position: 'absolute',
-                        cursor: 'pointer',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        backgroundColor: rule.enabled ? 'var(--primary)' : '#ccc',
-                        borderRadius: '24px',
-                        transition: '0.3s'
-                      }}>
-                        <span style={{
-                          position: 'absolute',
-                          height: '18px',
-                          width: '18px',
-                          left: rule.enabled ? '27px' : '3px',
-                          bottom: '3px',
-                          backgroundColor: 'white',
-                          borderRadius: '50%',
-                          transition: '0.3s'
-                        }} />
-                      </span>
-                    </label>
-
-                    {/* 删除按钮 (只有自定义规则可删除) */}
-                    {rule.id.startsWith('custom_') && (
-                      <button
-                        className="btn btn-sm"
-                        style={{ background: '#fee2e2', color: '#dc2626', border: 'none' }}
-                        onClick={() => handleDeleteAlarmRule(rule.id)}
-                      >
-                        删除
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* 新增告警规则弹窗 */}
-              {showAddAlarmModal && (
-                <div 
-                  style={{
-                    position: 'fixed',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    background: 'rgba(0,0,0,0.5)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 1000
-                  }}
-                  onClick={() => setShowAddAlarmModal(false)}
-                >
-                  <div 
-                    style={{
-                      background: 'white',
-                      borderRadius: '12px',
-                      padding: '24px',
-                      width: '500px',
-                      maxWidth: '90vw'
-                    }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <h3 style={{ marginBottom: '20px' }}>新增告警规则</h3>
-                    
-                    <div className="form-group">
-                      <label className="form-label">规则名称 <span className="required">*</span></label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="如：电压过高告警"
-                        value={newAlarmRule.name}
-                        onChange={(e) => setNewAlarmRule(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">触发条件 <span className="required">*</span></label>
-                      <input
-                        type="text"
-                        className="form-input"
-                        placeholder="如：电压 > 420V"
-                        value={newAlarmRule.condition}
-                        onChange={(e) => setNewAlarmRule(prev => ({ ...prev, condition: e.target.value }))}
-                      />
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">告警等级</label>
-                      <div style={{ display: 'flex', gap: '12px' }}>
-                        {alarmLevels.map(level => (
-                          <label 
-                            key={level.id}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              cursor: 'pointer',
-                              padding: '8px 12px',
-                              borderRadius: '6px',
-                              border: newAlarmRule.level === level.id 
-                                ? `2px solid ${level.color}` 
-                                : '1px solid var(--gray-200)',
-                              background: newAlarmRule.level === level.id 
-                                ? hexToRgba(level.color, 0.1) 
-                                : 'white'
-                            }}
-                          >
-                            <input
-                              type="radio"
-                              name="alarmLevel"
-                              checked={newAlarmRule.level === level.id}
-                              onChange={() => setNewAlarmRule(prev => ({ ...prev, level: level.id }))}
-                              style={{ display: 'none' }}
-                            />
-                            <span style={{ 
-                              width: '10px', 
-                              height: '10px', 
-                              borderRadius: '50%', 
-                              background: level.color 
-                            }} />
-                            <span>{level.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
-                      <button 
-                        className="btn btn-secondary"
-                        onClick={() => setShowAddAlarmModal(false)}
-                      >
-                        取消
-                      </button>
-                      <button 
-                        className="btn btn-primary"
-                        onClick={handleAddAlarmRule}
-                        disabled={!newAlarmRule.name || !newAlarmRule.condition}
-                      >
-                        确认添加
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* 步骤7: 北向配置 */}
           {currentStep === 7 && (
