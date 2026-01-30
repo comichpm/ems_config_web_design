@@ -1206,7 +1206,7 @@ function ProjectConfigWizard({ onNavigate }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => onNavigate && onNavigate('templates', '模板管理')}
+                  onClick={() => onNavigate && onNavigate('template-manager', '模板管理')}
                   className="btn btn-secondary"
                   style={{ whiteSpace: 'nowrap' }}
                 >
