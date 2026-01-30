@@ -2148,6 +2148,105 @@ function ProjectConfigWizard({ onNavigate }) {
               {/* 调度模式Tab */}
               {algorithmTab === 'mode' && (
                 <div>
+                  {/* 策略预设快捷配置 */}
+                  <div style={{
+                    marginBottom: '28px',
+                    padding: '20px',
+                    background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                    borderRadius: '16px',
+                    border: '2px solid #86efac'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                      <span style={{ fontSize: '28px' }}>🎯</span>
+                      <div>
+                        <div style={{ fontWeight: '700', color: '#166534', fontSize: '16px' }}>快捷策略配置（推荐新手使用）</div>
+                        <div style={{ fontSize: '13px', color: '#15803d' }}>点击下方预设，系统将自动配置所有相关策略参数</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                      {[
+                        { 
+                          id: 'maxEconomy', 
+                          name: '💰 经济最大化', 
+                          desc: '最大化峰谷套利收益',
+                          config: {
+                            schedulingMode: 'economic',
+                            weights: { economic: 60, lifespan: 20, socBalance: 10, curtailmentMin: 10 },
+                            constraints: { socMin: 10, socMax: 90, maxChargePower: 100, maxDischargePower: 100 },
+                            peakShaving: { enabled: true },
+                            demandControl: { enabled: true }
+                          }
+                        },
+                        { 
+                          id: 'longLife', 
+                          name: '🔋 设备长寿命', 
+                          desc: '延长电池使用寿命',
+                          config: {
+                            schedulingMode: 'lifespan',
+                            weights: { economic: 20, lifespan: 60, socBalance: 10, curtailmentMin: 10 },
+                            constraints: { socMin: 20, socMax: 80, maxChargePower: 70, maxDischargePower: 70 },
+                            peakShaving: { enabled: true },
+                            demandControl: { enabled: false }
+                          }
+                        },
+                        { 
+                          id: 'emergency', 
+                          name: '🛡️ 应急保障', 
+                          desc: '保留充足应急电量',
+                          config: {
+                            schedulingMode: 'balanced',
+                            weights: { economic: 25, lifespan: 25, socBalance: 25, curtailmentMin: 25 },
+                            constraints: { socMin: 40, socMax: 90, maxChargePower: 50, maxDischargePower: 50 },
+                            peakShaving: { enabled: false },
+                            demandControl: { enabled: true }
+                          }
+                        },
+                        { 
+                          id: 'smartBalance', 
+                          name: '⚖️ 智能平衡', 
+                          desc: '综合优化各项指标',
+                          config: {
+                            schedulingMode: 'balanced',
+                            weights: { economic: 25, lifespan: 25, socBalance: 25, curtailmentMin: 25 },
+                            constraints: { socMin: 15, socMax: 85, maxChargePower: 80, maxDischargePower: 80 },
+                            peakShaving: { enabled: true },
+                            demandControl: { enabled: true }
+                          }
+                        }
+                      ].map(preset => (
+                        <button
+                          key={preset.id}
+                          onClick={() => {
+                            setAlgorithmConfig(prev => ({
+                              ...prev,
+                              schedulingMode: preset.config.schedulingMode,
+                              weights: preset.config.weights,
+                              constraints: { ...prev.constraints, ...preset.config.constraints },
+                              peakShaving: { ...prev.peakShaving, enabled: preset.config.peakShaving.enabled },
+                              demandControl: { ...prev.demandControl, enabled: preset.config.demandControl.enabled }
+                            }));
+                            alert(`✅ 已应用"${preset.name}"预设配置！\n\n配置内容：\n• SOC范围: ${preset.config.constraints.socMin}%-${preset.config.constraints.socMax}%\n• 功率限制: ${preset.config.constraints.maxDischargePower}%\n• 削峰填谷: ${preset.config.peakShaving.enabled ? '开启' : '关闭'}\n• 需量控制: ${preset.config.demandControl.enabled ? '开启' : '关闭'}`);
+                          }}
+                          style={{
+                            padding: '16px 12px',
+                            background: 'white',
+                            border: '2px solid #a7f3d0',
+                            borderRadius: '12px',
+                            cursor: 'pointer',
+                            textAlign: 'center',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseOver={(e) => { e.currentTarget.style.background = '#ecfdf5'; e.currentTarget.style.transform = 'translateY(-2px)'; }}
+                          onMouseOut={(e) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.transform = 'translateY(0)'; }}
+                        >
+                          <div style={{ fontSize: '24px', marginBottom: '8px' }}>{preset.name.split(' ')[0]}</div>
+                          <div style={{ fontWeight: '600', color: '#166534', fontSize: '13px', marginBottom: '4px' }}>{preset.name.split(' ').slice(1).join(' ')}</div>
+                          <div style={{ fontSize: '11px', color: '#15803d' }}>{preset.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <h4 style={{ marginBottom: '16px', color: 'var(--gray-700)' }}>调度模式选择</h4>
                   <p style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '20px' }}>
                     选择调度模式后，系统将自动设置相应的目标权重（可在"目标权重"Tab中查看和调整）
@@ -2366,32 +2465,86 @@ function ProjectConfigWizard({ onNavigate }) {
               {/* 峰谷/需量Tab - 新增 */}
               {algorithmTab === 'peakValley' && (
                 <div>
-                  {/* 策略关系说明 */}
+                  {/* 策略效果预览 - 实时计算 */}
                   <div style={{
                     marginBottom: '24px',
-                    padding: '16px',
-                    background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-                    borderRadius: '12px',
-                    border: '1px solid #90caf9'
+                    padding: '20px',
+                    background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
+                    borderRadius: '16px',
+                    border: '2px solid #fbbf24'
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-                      <span style={{ fontSize: '24px' }}>💡</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+                      <span style={{ fontSize: '28px' }}>📊</span>
                       <div>
-                        <div style={{ fontWeight: '600', color: '#1565c0', marginBottom: '8px' }}>峰谷/需量与高级策略的关系</div>
-                        <div style={{ fontSize: '13px', color: '#1976d2', lineHeight: '1.6' }}>
-                          <div style={{ marginBottom: '6px' }}>
-                            <strong>• 峰谷电价策略：</strong>根据电价时段差异进行充放电调度，谷时充电、峰时放电，降低用电成本
-                          </div>
-                          <div style={{ marginBottom: '6px' }}>
-                            <strong>• 需量控制策略：</strong>在用电高峰时段通过储能放电限制需量，避免需量超限产生高额容量电费
-                          </div>
-                          <div>
-                            <strong>• 高级策略：</strong>定义整体调度框架参数（调度周期、预测窗口等），与上述策略配合使用
+                        <div style={{ fontWeight: '700', color: '#92400e', fontSize: '16px' }}>当前配置效果预览</div>
+                        <div style={{ fontSize: '13px', color: '#b45309' }}>根据您的配置实时计算预期效果</div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+                      <div style={{ padding: '16px', background: 'white', borderRadius: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#78716c', marginBottom: '6px' }}>可用SOC范围</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#059669' }}>
+                          {algorithmConfig.constraints.socMax - algorithmConfig.constraints.socMin}%
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#78716c' }}>
+                          {algorithmConfig.constraints.socMin}% - {algorithmConfig.constraints.socMax}%
+                        </div>
+                      </div>
+                      <div style={{ padding: '16px', background: 'white', borderRadius: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#78716c', marginBottom: '6px' }}>预计日运行时段</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#2563eb' }}>
+                          {algorithmConfig.peakShaving.enabled ? 
+                            (algorithmConfig.peakShaving.peakPeriods.length + algorithmConfig.peakShaving.valleyPeriods.length) * 2 : 0}h
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#78716c' }}>
+                          {algorithmConfig.peakShaving.enabled ? '峰谷调度' : '未启用削峰'}
+                        </div>
+                      </div>
+                      <div style={{ padding: '16px', background: 'white', borderRadius: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#78716c', marginBottom: '6px' }}>预计日节省</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#ea580c' }}>
+                          ¥{algorithmConfig.peakShaving.enabled ? 
+                            Math.round((algorithmConfig.constraints.socMax - algorithmConfig.constraints.socMin) * 
+                            (algorithmConfig.pricing.peakPrice - algorithmConfig.pricing.valleyPrice) * 10) : 0}
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#78716c' }}>基于峰谷价差</div>
+                      </div>
+                      <div style={{ padding: '16px', background: 'white', borderRadius: '12px', textAlign: 'center' }}>
+                        <div style={{ fontSize: '11px', color: '#78716c', marginBottom: '6px' }}>功率利用率</div>
+                        <div style={{ fontSize: '24px', fontWeight: '700', color: '#7c3aed' }}>
+                          {algorithmConfig.constraints.maxDischargePower}%
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#78716c' }}>最大放电功率</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 策略冲突检测 */}
+                  {(algorithmConfig.constraints.socMin >= algorithmConfig.constraints.socMax || 
+                    (algorithmConfig.peakShaving.enabled && !algorithmConfig.pricing.peakPrice)) && (
+                    <div style={{
+                      marginBottom: '24px',
+                      padding: '16px',
+                      background: '#fef2f2',
+                      borderRadius: '12px',
+                      border: '2px solid #fca5a5'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ fontSize: '24px' }}>⚠️</span>
+                        <div>
+                          <div style={{ fontWeight: '600', color: '#dc2626', marginBottom: '4px' }}>检测到配置问题</div>
+                          <div style={{ fontSize: '13px', color: '#b91c1c' }}>
+                            {algorithmConfig.constraints.socMin >= algorithmConfig.constraints.socMax && (
+                              <div>• SOC下限({algorithmConfig.constraints.socMin}%)不能大于或等于上限({algorithmConfig.constraints.socMax}%)</div>
+                            )}
+                            {algorithmConfig.peakShaving.enabled && !algorithmConfig.pricing.peakPrice && (
+                              <div>• 已启用削峰填谷但未配置峰时电价，请在下方电价配置中填写</div>
+                            )}
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* 削峰填谷配置 */}
                   <div style={{ marginBottom: '24px' }}>
