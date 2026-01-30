@@ -226,6 +226,18 @@ export const protocolTypes = [
       timeout: 3000,
       retries: 3
     }
+  },
+  { 
+    id: 'virtual', 
+    name: '虚拟设备协议', 
+    description: '用于虚拟设备，无物理通信',
+    channelTypes: ['virtual'],
+    defaultConfig: {
+      calculateCycle: 1000,
+      cacheStrategy: 'realtime',
+      initMode: 'system_start',
+      faultHandling: 'use_last'
+    }
   }
 ];
 
@@ -273,6 +285,32 @@ export const channelTypes = [
       { key: 'channel', name: '通道号', type: 'select', options: ['CAN0', 'CAN1'] },
       { key: 'baudRate', name: '波特率', type: 'select', options: [125000, 250000, 500000, 1000000] },
       { key: 'canId', name: 'CAN ID', type: 'text', placeholder: '0x001' }
+    ]
+  },
+  {
+    id: 'virtual',
+    name: '虚拟通道',
+    icon: '🔮',
+    config: [
+      { key: 'calculateCycle', name: '计算周期(ms)', type: 'select', options: [100, 200, 500, 1000, 2000, 5000, 10000, 30000, 60000] },
+      { key: 'cacheStrategy', name: '数据缓存策略', type: 'select', options: [
+        { value: 'realtime', label: '实时计算' },
+        { value: 'cache_1min', label: '缓存1分钟' },
+        { value: 'cache_5min', label: '缓存5分钟' },
+        { value: 'cache_10min', label: '缓存10分钟' }
+      ]},
+      { key: 'initMode', name: '初始化模式', type: 'select', options: [
+        { value: 'system_start', label: '系统启动时' },
+        { value: 'first_access', label: '首次访问时' },
+        { value: 'manual', label: '手动启动' }
+      ]},
+      { key: 'faultHandling', name: '故障处理', type: 'select', options: [
+        { value: 'use_last', label: '使用上次值' },
+        { value: 'use_default', label: '使用默认值' },
+        { value: 'mark_invalid', label: '标记无效' },
+        { value: 'stop_calc', label: '停止计算' }
+      ]},
+      { key: 'dependModels', name: '依赖物模型', type: 'multiselect', options: [], placeholder: '选择数据来源物模型' }
     ]
   }
 ];
