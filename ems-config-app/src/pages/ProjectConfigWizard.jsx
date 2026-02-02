@@ -4310,18 +4310,40 @@ function ProjectConfigWizard({ onNavigate }) {
                             {northboundConfig.pointTableMapping.map((point, index) => (
                               <tr key={point.id} style={{ borderBottom: '1px solid var(--gray-200)' }}>
                                 <td style={{ padding: '8px' }}>
-                                  <input
-                                    type="text"
+                                  <select
                                     className="form-input"
-                                    style={{ fontSize: '12px', padding: '6px' }}
-                                    placeholder="如: device1.voltage"
+                                    style={{ fontSize: '12px', padding: '6px', minWidth: '200px' }}
                                     value={point.sourcePath}
                                     onChange={(e) => {
                                       const newPoints = [...northboundConfig.pointTableMapping];
                                       newPoints[index] = { ...point, sourcePath: e.target.value };
                                       setNorthboundConfig(prev => ({ ...prev, pointTableMapping: newPoints }));
                                     }}
-                                  />
+                                  >
+                                    <option value="">-- 选择源点位 --</option>
+                                    {/* 从已选设备的点表中获取点位 */}
+                                    {selectedDevices.map(device => {
+                                      const pointTable = pointTableTemplates[device.type] || pointTableTemplates.bms || [];
+                                      return (
+                                        <optgroup key={device.instanceId} label={`📦 ${device.name} (${device.type})`}>
+                                          {pointTable.map((pt, ptIdx) => (
+                                            <option key={ptIdx} value={`${device.name}.${pt.name}`}>
+                                              {device.name} &gt; {pt.name}
+                                            </option>
+                                          ))}
+                                        </optgroup>
+                                      );
+                                    })}
+                                    {/* 虚拟设备点表 */}
+                                    <optgroup label="🔮 虚拟设备点">
+                                      <option value="virtual.system_total_power">系统计算点 &gt; 系统总功率</option>
+                                      <option value="virtual.system_total_soc">系统计算点 &gt; 系统总SOC</option>
+                                      <option value="virtual.daily_charge_energy">系统计算点 &gt; 日充电量</option>
+                                      <option value="virtual.daily_discharge_energy">系统计算点 &gt; 日放电量</option>
+                                      <option value="virtual.pv_total_power">光伏汇总 &gt; 光伏总功率</option>
+                                      <option value="virtual.grid_power">电网计算 &gt; 电网功率</option>
+                                    </optgroup>
+                                  </select>
                                 </td>
                                 <td style={{ padding: '8px' }}>
                                   <input
