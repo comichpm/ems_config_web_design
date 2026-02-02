@@ -1020,28 +1020,123 @@ function DeviceModelWizard({ onNavigate }) {
               {/* 通道参数配置 */}
               <div className="param-card">
                 <div className="param-card-title">
-                  <span>🔌</span> 通道参数配置
+                  <span>{formData.channelType === 'virtual' ? '🔮' : '🔌'}</span> 
+                  {formData.channelType === 'virtual' ? '虚拟通道配置' : '通道参数配置'}
                 </div>
+                
+                {/* 虚拟通道说明 */}
+                {formData.channelType === 'virtual' && (
+                  <div style={{ 
+                    background: 'linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%)',
+                    border: '1px solid #7dd3fc',
+                    borderRadius: '8px',
+                    padding: '12px 16px',
+                    marginBottom: '16px',
+                    fontSize: '13px',
+                    color: '#0369a1'
+                  }}>
+                    <div style={{ fontWeight: '600', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span>💡</span> 虚拟设备说明
+                    </div>
+                    <p style={{ margin: '0 0 8px 0' }}>
+                      虚拟设备用于处理<strong>没有实际物理设备</strong>的场景，通过计算、聚合其他设备数据来生成虚拟点位。
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      <strong>典型应用：</strong>数据聚合（如系统总功率）、计算派生值、模拟测试、逻辑运算等。
+                    </p>
+                  </div>
+                )}
+
                 <div className="param-grid">
                   {channelTypes
                     .find(c => c.id === formData.channelType)
-                    ?.config.map(cfg => (
-                      <div key={cfg.key} className="form-group" style={{ marginBottom: 0 }}>
-                        <label className="form-label">{cfg.name}</label>
-                        {cfg.type === 'select' ? (
-                          <select
-                            className="form-select"
-                            value={formData.channelConfig[cfg.key] || cfg.options[0]}
-                            onChange={(e) => updateFormData('channelConfig', {
-                              ...formData.channelConfig,
-                              [cfg.key]: e.target.value
-                            })}
-                          >
-                            {cfg.options.map(opt => (
-                              <option key={opt} value={opt}>{opt}</option>
-                            ))}
-                          </select>
-                        ) : (
+                    ?.config.map(cfg => {
+                      // 处理multiselect类型
+                      if (cfg.type === 'multiselect') {
+                        return (
+                          <div key={cfg.key} className="form-group" style={{ marginBottom: 0, gridColumn: '1 / -1' }}>
+                            <label className="form-label">{cfg.name}</label>
+                            <div style={{ 
+                              display: 'flex', 
+                              flexWrap: 'wrap', 
+                              gap: '8px',
+                              padding: '12px',
+                              background: 'var(--gray-50)',
+                              borderRadius: '8px',
+                              border: '1px solid var(--gray-200)'
+                            }}>
+                              {/* 示例物模型列表 */}
+                              {['BMS物模型', 'PCS物模型', '电表物模型', '逆变器物模型', '风机物模型'].map(model => {
+                                const isSelected = (formData.channelConfig[cfg.key] || []).includes(model);
+                                return (
+                                  <button
+                                    key={model}
+                                    type="button"
+                                    onClick={() => {
+                                      const current = formData.channelConfig[cfg.key] || [];
+                                      const updated = isSelected 
+                                        ? current.filter(m => m !== model)
+                                        : [...current, model];
+                                      updateFormData('channelConfig', {
+                                        ...formData.channelConfig,
+                                        [cfg.key]: updated
+                                      });
+                                    }}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: '16px',
+                                      border: isSelected ? '2px solid #3b82f6' : '1px solid var(--gray-300)',
+                                      background: isSelected ? '#dbeafe' : 'white',
+                                      color: isSelected ? '#1d4ed8' : 'var(--gray-700)',
+                                      cursor: 'pointer',
+                                      fontSize: '13px',
+                                      fontWeight: isSelected ? '600' : '400'
+                                    }}
+                                  >
+                                    {isSelected && '✓ '}{model}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                            <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginTop: '4px' }}>
+                              选择虚拟点计算时需要引用的物模型数据
+                            </div>
+                          </div>
+                        );
+                      }
+                      
+                      // 处理select类型，支持对象格式options
+                      if (cfg.type === 'select') {
+                        const firstOption = cfg.options[0];
+                        const isObjectOptions = typeof firstOption === 'object' && firstOption !== null;
+                        const defaultValue = isObjectOptions ? firstOption.value : firstOption;
+                        
+                        return (
+                          <div key={cfg.key} className="form-group" style={{ marginBottom: 0 }}>
+                            <label className="form-label">{cfg.name}</label>
+                            <select
+                              className="form-select"
+                              value={formData.channelConfig[cfg.key] || defaultValue}
+                              onChange={(e) => updateFormData('channelConfig', {
+                                ...formData.channelConfig,
+                                [cfg.key]: e.target.value
+                              })}
+                            >
+                              {cfg.options.map(opt => {
+                                if (typeof opt === 'object' && opt !== null) {
+                                  return <option key={opt.value} value={opt.value}>{opt.label}</option>;
+                                }
+                                return <option key={opt} value={opt}>{opt}</option>;
+                              })}
+                            </select>
+                          </div>
+                        );
+                      }
+                      
+                      // 其他类型（text, number等）
+                      return (
+                        <div key={cfg.key} className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">{cfg.name}</label>
                           <input
                             type={cfg.type}
                             className="form-input"
@@ -1052,89 +1147,91 @@ function DeviceModelWizard({ onNavigate }) {
                               [cfg.key]: e.target.value
                             })}
                           />
-                        )}
-                      </div>
-                    ))}
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
 
-              {/* 通信控制参数 */}
-              <div className="param-card">
-                <div className="param-card-title">
-                  <span>⏱️</span> 通信控制参数
+              {/* 通信控制参数 - 虚拟通道不显示 */}
+              {formData.channelType !== 'virtual' && (
+                <div className="param-card">
+                  <div className="param-card-title">
+                    <span>⏱️</span> 通信控制参数
+                  </div>
+                  <div className="param-grid">
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">
+                        超时时间
+                        <span className="tooltip-container">
+                          <span className="tooltip-trigger">?</span>
+                          <span className="tooltip-content">通信响应超时时间</span>
+                        </span>
+                      </label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={formData.timeout}
+                          onChange={(e) => updateFormData('timeout', Number(e.target.value))}
+                        />
+                        <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>ms</span>
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">
+                        重发次数
+                        <span className="tooltip-container">
+                          <span className="tooltip-trigger">?</span>
+                          <span className="tooltip-content">通信失败后重试次数</span>
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        value={formData.retries}
+                        onChange={(e) => updateFormData('retries', Number(e.target.value))}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">
+                        断线重连间隔
+                        <span className="tooltip-container">
+                          <span className="tooltip-trigger">?</span>
+                          <span className="tooltip-content">断开连接后重连等待时间</span>
+                        </span>
+                      </label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={formData.reconnectInterval}
+                          onChange={(e) => updateFormData('reconnectInterval', Number(e.target.value))}
+                        />
+                        <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>ms</span>
+                      </div>
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">
+                        轮询间隔
+                        <span className="tooltip-container">
+                          <span className="tooltip-trigger">?</span>
+                          <span className="tooltip-content">数据采集周期</span>
+                        </span>
+                      </label>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={formData.pollInterval}
+                          onChange={(e) => updateFormData('pollInterval', Number(e.target.value))}
+                        />
+                        <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>ms</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="param-grid">
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">
-                      超时时间
-                      <span className="tooltip-container">
-                        <span className="tooltip-trigger">?</span>
-                        <span className="tooltip-content">通信响应超时时间</span>
-                      </span>
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.timeout}
-                        onChange={(e) => updateFormData('timeout', Number(e.target.value))}
-                      />
-                      <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>ms</span>
-                    </div>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">
-                      重发次数
-                      <span className="tooltip-container">
-                        <span className="tooltip-trigger">?</span>
-                        <span className="tooltip-content">通信失败后重试次数</span>
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={formData.retries}
-                      onChange={(e) => updateFormData('retries', Number(e.target.value))}
-                    />
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">
-                      断线重连间隔
-                      <span className="tooltip-container">
-                        <span className="tooltip-trigger">?</span>
-                        <span className="tooltip-content">断开连接后重连等待时间</span>
-                      </span>
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.reconnectInterval}
-                        onChange={(e) => updateFormData('reconnectInterval', Number(e.target.value))}
-                      />
-                      <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>ms</span>
-                    </div>
-                  </div>
-                  <div className="form-group" style={{ marginBottom: 0 }}>
-                    <label className="form-label">
-                      轮询间隔
-                      <span className="tooltip-container">
-                        <span className="tooltip-trigger">?</span>
-                        <span className="tooltip-content">数据采集周期</span>
-                      </span>
-                    </label>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={formData.pollInterval}
-                        onChange={(e) => updateFormData('pollInterval', Number(e.target.value))}
-                      />
-                      <span style={{ lineHeight: '40px', color: 'var(--gray-500)' }}>ms</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              )}
 
               {/* 点表选择 */}
               <div className="param-card">
@@ -1224,6 +1321,7 @@ function DeviceModelWizard({ onNavigate }) {
                             {formData.protocolType === 'can' && <th>CAN ID</th>}
                             {formData.protocolType.startsWith('dlt645') && <th>数据标识</th>}
                             {formData.protocolType === 'opc' && <th>节点ID</th>}
+                            {formData.protocolType === 'virtual' && <th>计算公式</th>}
                             <th>名称</th>
                             <th>数据类型</th>
                             <th>读写</th>
@@ -1242,6 +1340,7 @@ function DeviceModelWizard({ onNavigate }) {
                               {formData.protocolType === 'can' && <td>{point.canId}</td>}
                               {formData.protocolType.startsWith('dlt645') && <td>{point.dataId}</td>}
                               {formData.protocolType === 'opc' && <td style={{ fontSize: '11px' }}>{point.nodeId}</td>}
+                              {formData.protocolType === 'virtual' && <td style={{ fontSize: '11px', fontFamily: 'monospace', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{point.formula || '-'}</td>}
                               <td>{point.name}</td>
                               <td>{point.type}</td>
                               <td>
@@ -1286,11 +1385,32 @@ function DeviceModelWizard({ onNavigate }) {
                 )}
               </div>
 
-              <div style={{ marginTop: '16px' }}>
-                <button className="btn btn-secondary">
-                  🔍 测试连接
-                </button>
-              </div>
+              {/* 测试连接 - 虚拟协议不显示 */}
+              {formData.protocolType !== 'virtual' && (
+                <div style={{ marginTop: '16px' }}>
+                  <button className="btn btn-secondary">
+                    🔍 测试连接
+                  </button>
+                </div>
+              )}
+              
+              {/* 虚拟协议提示 */}
+              {formData.protocolType === 'virtual' && (
+                <div style={{ 
+                  marginTop: '16px',
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
+                  border: '1px solid #86efac',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  color: '#166534'
+                }}>
+                  <strong>✅ 虚拟设备配置完成</strong>
+                  <p style={{ margin: '8px 0 0 0' }}>
+                    虚拟设备无需测试物理连接。在下一步配置告警规则，或在"拓扑&虚拟点"步骤中配置虚拟点计算公式。
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
