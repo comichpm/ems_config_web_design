@@ -6,6 +6,10 @@ function DeviceModelList({ onNavigate }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const fileInputRef = useRef(null);
+  
+  // 编辑功能状态
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingModel, setEditingModel] = useState(null);
 
   useEffect(() => {
     loadModels();
@@ -27,6 +31,28 @@ function DeviceModelList({ onNavigate }) {
       localStorage.setItem('ems_device_models', JSON.stringify(updatedModels));
       setDeviceModels(updatedModels);
     }
+  };
+
+  // 编辑物模型
+  const handleEditModel = (model) => {
+    setEditingModel({ ...model });
+    setShowEditModal(true);
+  };
+
+  // 保存编辑
+  const handleSaveEdit = () => {
+    if (!editingModel || !editingModel.modelName) {
+      alert('物模型名称不能为空');
+      return;
+    }
+    const updatedModels = deviceModels.map(m => 
+      m.id === editingModel.id ? { ...editingModel, updatedAt: new Date().toISOString() } : m
+    );
+    localStorage.setItem('ems_device_models', JSON.stringify(updatedModels));
+    setDeviceModels(updatedModels);
+    setShowEditModal(false);
+    setEditingModel(null);
+    alert('物模型更新成功！');
   };
 
   const handleExportModel = (model) => {
@@ -214,6 +240,13 @@ function DeviceModelList({ onNavigate }) {
                     <td>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <button 
+                          className="btn btn-sm btn-warning"
+                          style={{ backgroundColor: '#f59e0b', color: 'white' }}
+                          onClick={() => handleEditModel(model)}
+                        >
+                          ✏️ 编辑
+                        </button>
+                        <button 
                           className="btn btn-sm btn-secondary"
                           onClick={() => handleExportModel(model)}
                         >
@@ -232,6 +265,111 @@ function DeviceModelList({ onNavigate }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* 编辑物模型模态框 */}
+      {showEditModal && editingModel && (
+        <div className="modal-overlay" style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+          justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div className="modal-content" style={{
+            backgroundColor: 'white', padding: '24px', borderRadius: '12px',
+            width: '600px', maxHeight: '80vh', overflow: 'auto'
+          }}>
+            <h3 style={{ marginBottom: '20px' }}>✏️ 编辑物模型</h3>
+            
+            <div style={{ display: 'grid', gap: '16px' }}>
+              <div>
+                <label className="form-label">物模型名称 <span style={{ color: 'red' }}>*</span></label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editingModel.modelName || ''}
+                  onChange={(e) => setEditingModel({ ...editingModel, modelName: e.target.value })}
+                />
+              </div>
+              
+              <div>
+                <label className="form-label">描述</label>
+                <textarea
+                  className="form-input"
+                  rows={3}
+                  value={editingModel.modelDescription || ''}
+                  onChange={(e) => setEditingModel({ ...editingModel, modelDescription: e.target.value })}
+                />
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label className="form-label">制造商</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editingModel.manufacturer || ''}
+                    onChange={(e) => setEditingModel({ ...editingModel, manufacturer: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="form-label">型号规格</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    value={editingModel.modelSpec || ''}
+                    onChange={(e) => setEditingModel({ ...editingModel, modelSpec: e.target.value })}
+                  />
+                </div>
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                <div>
+                  <label className="form-label">电压等级</label>
+                  <select
+                    className="form-select"
+                    value={editingModel.voltageLevel || ''}
+                    onChange={(e) => setEditingModel({ ...editingModel, voltageLevel: e.target.value })}
+                  >
+                    <option value="">-- 选择 --</option>
+                    <option value="lv">低压 (LV)</option>
+                    <option value="mv">中压 (MV)</option>
+                    <option value="hv">高压 (HV)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="form-label">通信协议</label>
+                  <select
+                    className="form-select"
+                    value={editingModel.protocolType || ''}
+                    onChange={(e) => setEditingModel({ ...editingModel, protocolType: e.target.value })}
+                  >
+                    <option value="">-- 选择 --</option>
+                    <option value="modbus_rtu">Modbus RTU</option>
+                    <option value="modbus_tcp">Modbus TCP</option>
+                    <option value="iec104">IEC 104</option>
+                    <option value="mqtt">MQTT</option>
+                    <option value="virtual">虚拟设备</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
+              <button 
+                className="btn btn-secondary"
+                onClick={() => { setShowEditModal(false); setEditingModel(null); }}
+              >
+                取消
+              </button>
+              <button 
+                className="btn btn-primary"
+                onClick={handleSaveEdit}
+              >
+                💾 保存修改
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
