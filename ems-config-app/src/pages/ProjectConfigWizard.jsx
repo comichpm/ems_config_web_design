@@ -13,7 +13,8 @@ import 'reactflow/dist/style.css';
 import {
   deviceCategories,
   algorithmDefaults,
-  northboundProtocols
+  northboundProtocols,
+  deviceBasicAttributes
 } from '../data/deviceTypes';
 
 // 7步引导流程 - 恢复北向配置
@@ -1636,296 +1637,150 @@ function ProjectConfigWizard({ onNavigate }) {
                                     </div>
 
                                     {/* 设备详细配置 - 展开时显示 */}
-                                    {isDeviceExpanded && (
-                                      <div style={{ padding: '16px', borderTop: '1px solid var(--gray-200)' }}>
-                                        {/* 物理通道配置 */}
-                                        <div style={{ marginBottom: '20px' }}>
-                                          <h5 style={{ 
-                                            margin: '0 0 12px 0', 
-                                            color: 'var(--gray-700)',
-                                            fontSize: '14px',
-                                            display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '8px'
-                                          }}>
-                                            <span>🔌</span> 物理通道配置
-                                          </h5>
-                                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>物理口</label>
-                                              <select
-                                                className="form-select"
-                                                value={params.physicalPort || 'eth0'}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'physicalPort', e.target.value)}
-                                              >
-                                                {physicalPorts.map(p => (
-                                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                    {isDeviceExpanded && (() => {
+                                      // 获取设备物模型参数
+                                      const deviceType = device.deviceType || 'default';
+                                      const modelAttributes = deviceBasicAttributes[deviceType] || [];
+                                      
+                                      return (
+                                        <div style={{ padding: '16px', borderTop: '1px solid var(--gray-200)' }}>
+                                          {/* 设备物模型参数 - 来自deviceTypes.js */}
+                                          {modelAttributes.length > 0 ? (
+                                            <div style={{ marginBottom: '20px' }}>
+                                              <h5 style={{ 
+                                                margin: '0 0 12px 0', 
+                                                color: 'var(--gray-700)',
+                                                fontSize: '14px',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: '8px'
+                                              }}>
+                                                <span>📋</span> 设备物模型参数
+                                                <span style={{ 
+                                                  fontSize: '11px', 
+                                                  color: 'var(--gray-500)',
+                                                  fontWeight: 'normal',
+                                                  marginLeft: '8px'
+                                                }}>
+                                                  (来自物模型定义，可根据实际设备微调)
+                                                </span>
+                                              </h5>
+                                              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
+                                                {modelAttributes.map((attr) => (
+                                                  <div key={attr.key}>
+                                                    <label className="form-label" style={{ fontSize: '12px' }}>
+                                                      {attr.name}
+                                                      {attr.unit && <span style={{ color: 'var(--gray-400)', marginLeft: '4px' }}>({attr.unit})</span>}
+                                                    </label>
+                                                    {attr.type === 'select' ? (
+                                                      <select
+                                                        className="form-select"
+                                                        value={params[attr.key] ?? attr.default}
+                                                        onChange={(e) => updateDeviceParam(device.instanceId, attr.key, e.target.value)}
+                                                      >
+                                                        {(attr.options || []).map((opt) => (
+                                                          <option key={opt} value={opt}>{opt}</option>
+                                                        ))}
+                                                      </select>
+                                                    ) : attr.type === 'number' ? (
+                                                      <input
+                                                        type="number"
+                                                        className="form-input"
+                                                        placeholder={String(attr.default)}
+                                                        value={params[attr.key] ?? attr.default}
+                                                        onChange={(e) => updateDeviceParam(device.instanceId, attr.key, e.target.value, true)}
+                                                      />
+                                                    ) : (
+                                                      <input
+                                                        type="text"
+                                                        className="form-input"
+                                                        placeholder={String(attr.default)}
+                                                        value={params[attr.key] ?? attr.default}
+                                                        onChange={(e) => updateDeviceParam(device.instanceId, attr.key, e.target.value)}
+                                                      />
+                                                    )}
+                                                  </div>
                                                 ))}
-                                              </select>
+                                              </div>
                                             </div>
-                                            
-                                            {/* 串口参数 - 仅串口显示 */}
-                                            {portType === 'serial' && (
-                                              <>
-                                                <div>
-                                                  <label className="form-label" style={{ fontSize: '12px' }}>波特率</label>
-                                                  <select
-                                                    className="form-select"
-                                                    value={params.baudRate || '9600'}
-                                                    onChange={(e) => updateDeviceParam(device.instanceId, 'baudRate', e.target.value)}
-                                                  >
-                                                    <option value="9600">9600</option>
-                                                    <option value="19200">19200</option>
-                                                    <option value="38400">38400</option>
-                                                    <option value="57600">57600</option>
-                                                    <option value="115200">115200</option>
-                                                  </select>
-                                                </div>
-                                                <div>
-                                                  <label className="form-label" style={{ fontSize: '12px' }}>数据位</label>
-                                                  <select
-                                                    className="form-select"
-                                                    value={params.dataBits || '8'}
-                                                    onChange={(e) => updateDeviceParam(device.instanceId, 'dataBits', e.target.value)}
-                                                  >
-                                                    <option value="7">7</option>
-                                                    <option value="8">8</option>
-                                                  </select>
-                                                </div>
-                                                <div>
-                                                  <label className="form-label" style={{ fontSize: '12px' }}>停止位</label>
-                                                  <select
-                                                    className="form-select"
-                                                    value={params.stopBits || '1'}
-                                                    onChange={(e) => updateDeviceParam(device.instanceId, 'stopBits', e.target.value)}
-                                                  >
-                                                    <option value="1">1</option>
-                                                    <option value="2">2</option>
-                                                  </select>
-                                                </div>
-                                                <div>
-                                                  <label className="form-label" style={{ fontSize: '12px' }}>校验位</label>
-                                                  <select
-                                                    className="form-select"
-                                                    value={params.parity || 'none'}
-                                                    onChange={(e) => updateDeviceParam(device.instanceId, 'parity', e.target.value)}
-                                                  >
-                                                    <option value="none">无校验</option>
-                                                    <option value="even">偶校验</option>
-                                                    <option value="odd">奇校验</option>
-                                                  </select>
-                                                </div>
-                                              </>
-                                            )}
+                                          ) : (
+                                            <div style={{
+                                              padding: '20px',
+                                              background: 'var(--gray-50)',
+                                              borderRadius: '8px',
+                                              textAlign: 'center',
+                                              color: 'var(--gray-500)',
+                                              marginBottom: '20px'
+                                            }}>
+                                              <span style={{ fontSize: '24px', marginBottom: '8px', display: 'block' }}>📝</span>
+                                              <span>该设备类型 ({deviceType}) 暂无物模型参数定义</span>
+                                            </div>
+                                          )}
 
-                                            {/* CAN参数 */}
-                                            {portType === 'can' && (
-                                              <>
-                                                <div>
-                                                  <label className="form-label" style={{ fontSize: '12px' }}>波特率</label>
-                                                  <select
-                                                    className="form-select"
-                                                    value={params.canBaudRate || '250000'}
-                                                    onChange={(e) => updateDeviceParam(device.instanceId, 'canBaudRate', e.target.value)}
-                                                  >
-                                                    <option value="125000">125 kbps</option>
-                                                    <option value="250000">250 kbps</option>
-                                                    <option value="500000">500 kbps</option>
-                                                    <option value="1000000">1 Mbps</option>
-                                                  </select>
-                                                </div>
-                                                <div>
-                                                  <label className="form-label" style={{ fontSize: '12px' }}>节点ID</label>
-                                                  <input
-                                                    type="number"
-                                                    className="form-input"
-                                                    min="1"
-                                                    max="127"
-                                                    value={params.canNodeId || 1}
-                                                    onChange={(e) => updateDeviceParam(device.instanceId, 'canNodeId', e.target.value, true)}
-                                                  />
-                                                </div>
-                                              </>
-                                            )}
+                                          {/* 启用状态 */}
+                                          <div style={{ 
+                                            display: 'flex', 
+                                            alignItems: 'center', 
+                                            justifyContent: 'space-between',
+                                            padding: '12px 16px',
+                                            background: 'var(--gray-50)',
+                                            borderRadius: '8px',
+                                            marginTop: '8px'
+                                          }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <span>⚙️</span>
+                                              <span style={{ fontWeight: '500', color: 'var(--gray-700)' }}>设备启用状态</span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                              <label style={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '6px', 
+                                                cursor: 'pointer' 
+                                              }}>
+                                                <input
+                                                  type="radio"
+                                                  name={`enabled-${device.instanceId}`}
+                                                  checked={params.enabled !== false}
+                                                  onChange={() => updateDeviceParam(device.instanceId, 'enabled', true)}
+                                                />
+                                                <span style={{ color: '#2e7d32' }}>✓ 启用</span>
+                                              </label>
+                                              <label style={{ 
+                                                display: 'flex', 
+                                                alignItems: 'center', 
+                                                gap: '6px', 
+                                                cursor: 'pointer' 
+                                              }}>
+                                                <input
+                                                  type="radio"
+                                                  name={`enabled-${device.instanceId}`}
+                                                  checked={params.enabled === false}
+                                                  onChange={() => updateDeviceParam(device.instanceId, 'enabled', false)}
+                                                />
+                                                <span style={{ color: '#c62828' }}>✗ 禁用</span>
+                                              </label>
+                                            </div>
                                           </div>
-                                        </div>
 
-                                        {/* 通讯参数配置 */}
-                                        <div style={{ marginBottom: '20px' }}>
-                                          <h5 style={{ 
-                                            margin: '0 0 12px 0', 
-                                            color: 'var(--gray-700)',
-                                            fontSize: '14px',
+                                          {/* 物模型配置信息提示 */}
+                                          <div style={{
+                                            marginTop: '12px',
+                                            padding: '10px 12px',
+                                            background: '#e3f2fd',
+                                            borderRadius: '6px',
+                                            fontSize: '12px',
+                                            color: '#1565c0',
                                             display: 'flex',
                                             alignItems: 'center',
                                             gap: '8px'
                                           }}>
-                                            <span>📡</span> 通讯参数配置
-                                          </h5>
-                                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px' }}>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>通讯协议</label>
-                                              <select
-                                                className="form-select"
-                                                value={params.protocol || 'modbus_tcp'}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'protocol', e.target.value)}
-                                              >
-                                                <option value="modbus_tcp">Modbus TCP</option>
-                                                <option value="modbus_rtu">Modbus RTU</option>
-                                                <option value="iec104">IEC 104</option>
-                                                <option value="iec61850">IEC 61850</option>
-                                                <option value="can">CAN总线</option>
-                                                <option value="dlt645">DL/T 645</option>
-                                              </select>
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>IP地址</label>
-                                              <input
-                                                type="text"
-                                                className="form-input"
-                                                placeholder="192.168.1.100"
-                                                value={params.ip || ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'ip', e.target.value)}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>端口号</label>
-                                              <input
-                                                type="number"
-                                                className="form-input"
-                                                min="1"
-                                                max="65535"
-                                                placeholder="502"
-                                                value={params.port || ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'port', e.target.value, true)}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>从站地址</label>
-                                              <input
-                                                type="number"
-                                                className="form-input"
-                                                min="1"
-                                                max="247"
-                                                placeholder="1"
-                                                value={params.slaveAddress ?? ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'slaveAddress', e.target.value, true)}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>轮询周期(ms)</label>
-                                              <input
-                                                type="number"
-                                                className="form-input"
-                                                min="100"
-                                                step="100"
-                                                placeholder="1000"
-                                                value={params.pollInterval ?? ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'pollInterval', e.target.value, true)}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>超时时间(ms)</label>
-                                              <input
-                                                type="number"
-                                                className="form-input"
-                                                min="100"
-                                                step="100"
-                                                placeholder="3000"
-                                                value={params.timeout ?? ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'timeout', e.target.value, true)}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>重试次数</label>
-                                              <input
-                                                type="number"
-                                                className="form-input"
-                                                min="0"
-                                                max="10"
-                                                placeholder="3"
-                                                value={params.retries ?? ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'retries', e.target.value, true)}
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="form-label" style={{ fontSize: '12px' }}>断线重连(s)</label>
-                                              <input
-                                                type="number"
-                                                className="form-input"
-                                                min="1"
-                                                max="300"
-                                                placeholder="30"
-                                                value={params.reconnectInterval ?? ''}
-                                                onChange={(e) => updateDeviceParam(device.instanceId, 'reconnectInterval', e.target.value, true)}
-                                              />
-                                            </div>
+                                            <span>💡</span>
+                                            <span>以上参数默认值来自物模型配置，微调后的参数将用于当前项目</span>
                                           </div>
                                         </div>
-
-                                        {/* 启用状态（来自物模型的配置项） */}
-                                        <div style={{ 
-                                          display: 'flex', 
-                                          alignItems: 'center', 
-                                          justifyContent: 'space-between',
-                                          padding: '12px 16px',
-                                          background: 'var(--gray-50)',
-                                          borderRadius: '8px',
-                                          marginTop: '8px'
-                                        }}>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                            <span>⚙️</span>
-                                            <span style={{ fontWeight: '500', color: 'var(--gray-700)' }}>设备启用状态</span>
-                                          </div>
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                            <label style={{ 
-                                              display: 'flex', 
-                                              alignItems: 'center', 
-                                              gap: '6px', 
-                                              cursor: 'pointer' 
-                                            }}>
-                                              <input
-                                                type="radio"
-                                                name={`enabled-${device.instanceId}`}
-                                                checked={params.enabled !== false}
-                                                onChange={() => updateDeviceParam(device.instanceId, 'enabled', true)}
-                                              />
-                                              <span style={{ color: '#2e7d32' }}>✓ 启用</span>
-                                            </label>
-                                            <label style={{ 
-                                              display: 'flex', 
-                                              alignItems: 'center', 
-                                              gap: '6px', 
-                                              cursor: 'pointer' 
-                                            }}>
-                                              <input
-                                                type="radio"
-                                                name={`enabled-${device.instanceId}`}
-                                                checked={params.enabled === false}
-                                                onChange={() => updateDeviceParam(device.instanceId, 'enabled', false)}
-                                              />
-                                              <span style={{ color: '#c62828' }}>✗ 禁用</span>
-                                            </label>
-                                          </div>
-                                        </div>
-
-                                        {/* 物模型配置信息提示 */}
-                                        <div style={{
-                                          marginTop: '12px',
-                                          padding: '10px 12px',
-                                          background: '#e3f2fd',
-                                          borderRadius: '6px',
-                                          fontSize: '12px',
-                                          color: '#1565c0',
-                                          display: 'flex',
-                                          alignItems: 'center',
-                                          gap: '8px'
-                                        }}>
-                                          <span>💡</span>
-                                          <span>以上参数默认值来自物模型配置，微调后的参数将用于当前项目</span>
-                                        </div>
-                                      </div>
-                                    )}
+                                      );
+                                    })()}
                                   </div>
                                 );
                               })}
