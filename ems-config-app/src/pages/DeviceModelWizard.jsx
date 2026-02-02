@@ -1848,18 +1848,23 @@ function DeviceModelWizard({ onNavigate }) {
                             />
                           </div>
 
-                          {/* 当前物模型点表选择 */}
+                          {/* 当前物模型点表选择 - 使用实际配置的点表 */}
                           <div style={{ marginBottom: '12px' }}>
                             <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray-600)', marginBottom: '6px' }}>
                               📋 当前物模型点表 <span style={{ color: 'var(--gray-400)' }}>(点击插入)</span>
+                              {getCurrentPointTableData().length > 0 && (
+                                <span style={{ marginLeft: '8px', color: 'var(--success-600)', fontSize: '11px' }}>
+                                  已配置 {getCurrentPointTableData().length} 个点位
+                                </span>
+                              )}
                             </div>
-                            {customPointTable.length === 0 ? (
+                            {getCurrentPointTableData().length === 0 ? (
                               <div style={{ fontSize: '12px', color: 'var(--warning-600)', background: 'var(--warning-50)', padding: '8px', borderRadius: '4px' }}>
-                                ⚠️ 请先在"协议&通道"步骤中配置点表
+                                ⚠️ 请先在"协议&通道"步骤中配置点表，或选择预定义点表模板
                               </div>
                             ) : (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                {customPointTable.map((point) => (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '120px', overflowY: 'auto', padding: '4px', border: '1px solid var(--gray-200)', borderRadius: '4px', background: 'var(--gray-50)' }}>
+                                {getCurrentPointTableData().map((point) => (
                                   <button
                                     key={point.name}
                                     type="button"
@@ -1874,122 +1879,174 @@ function DeviceModelWizard({ onNavigate }) {
                                       border: '1px solid var(--primary-300)',
                                       borderRadius: '4px',
                                       cursor: 'pointer',
-                                      color: 'var(--primary-700)'
+                                      color: 'var(--primary-700)',
+                                      transition: 'all 0.2s'
                                     }}
-                                    title={`${point.description || point.name} (${point.type})`}
+                                    title={`${point.description || point.name} | 类型: ${point.type} | 地址: ${point.address}`}
                                   >
-                                    {point.name}
+                                    📍 {point.name}
                                   </button>
                                 ))}
                               </div>
                             )}
                           </div>
 
-                          {/* 跨物模型点表选择 */}
+                          {/* 跨物模型点表选择 - 增强版 */}
                           <div style={{ marginBottom: '12px' }}>
                             <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray-600)', marginBottom: '6px' }}>
-                              🔗 跨物模型点表 <span style={{ color: 'var(--gray-400)' }}>(选择其他物模型的点位)</span>
+                              🔗 跨物模型点表 <span style={{ color: 'var(--gray-400)' }}>(从其他物模型选择点位)</span>
                             </div>
+                            
+                            {/* 说明提示 */}
+                            <div style={{ fontSize: '11px', color: 'var(--info-600)', background: 'var(--info-50)', padding: '8px', borderRadius: '4px', marginBottom: '8px', border: '1px solid var(--info-200)' }}>
+                              💡 <strong>使用方法：</strong> 选择一个已配置的物模型，然后点击其点位插入到公式中。格式为 <code style={{ background: 'white', padding: '2px 4px', borderRadius: '2px' }}>{'{物模型.点位}'}</code>
+                            </div>
+                            
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                               <select 
                                 className="form-select"
-                                style={{ width: '150px', fontSize: '12px' }}
+                                style={{ width: '180px', fontSize: '12px' }}
                                 value={vp.selectedCrossModel || ''}
                                 onChange={(e) => handleUpdateVirtualPoint(vpIndex, 'selectedCrossModel', e.target.value)}
                               >
-                                <option value="">选择物模型...</option>
-                                <option value="BMS_Model">BMS物模型</option>
-                                <option value="PCS_Model">PCS物模型</option>
-                                <option value="Meter_Model">电表物模型</option>
-                                <option value="Inverter_Model">逆变器物模型</option>
+                                <option value="">选择其他物模型...</option>
+                                <optgroup label="储能系统">
+                                  <option value="BMS_Model">🔋 BMS电池管理系统</option>
+                                  <option value="PCS_Model">⚡ PCS储能变流器</option>
+                                  <option value="Battery_Cluster">🔌 电池簇</option>
+                                </optgroup>
+                                <optgroup label="电力设备">
+                                  <option value="Meter_Model">📊 电表</option>
+                                  <option value="Inverter_Model">☀️ 光伏逆变器</option>
+                                  <option value="Transformer">🔄 变压器</option>
+                                </optgroup>
+                                <optgroup label="辅助设备">
+                                  <option value="HVAC_Model">❄️ 空调系统</option>
+                                  <option value="Fire_System">🔥 消防系统</option>
+                                </optgroup>
                               </select>
+                              
                               {vp.selectedCrossModel && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', flex: 1 }}>
-                                  {/* 模拟其他物模型的点表 */}
-                                  {vp.selectedCrossModel === 'BMS_Model' && ['pack_voltage', 'pack_current', 'soc', 'soh', 'max_cell_temp', 'min_cell_temp'].map(pt => (
-                                    <button
-                                      key={pt}
-                                      type="button"
-                                      onClick={() => {
-                                        const newFormula = (vp.formula || '') + `{${vp.selectedCrossModel}.${pt}}`;
-                                        handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
-                                      }}
-                                      style={{
-                                        padding: '4px 8px',
-                                        fontSize: '11px',
-                                        background: 'var(--success-50)',
-                                        border: '1px solid var(--success-300)',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        color: 'var(--success-700)'
-                                      }}
-                                    >
-                                      {pt}
-                                    </button>
-                                  ))}
-                                  {vp.selectedCrossModel === 'PCS_Model' && ['dc_voltage', 'dc_current', 'ac_power', 'efficiency', 'running_state'].map(pt => (
-                                    <button
-                                      key={pt}
-                                      type="button"
-                                      onClick={() => {
-                                        const newFormula = (vp.formula || '') + `{${vp.selectedCrossModel}.${pt}}`;
-                                        handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
-                                      }}
-                                      style={{
-                                        padding: '4px 8px',
-                                        fontSize: '11px',
-                                        background: 'var(--success-50)',
-                                        border: '1px solid var(--success-300)',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        color: 'var(--success-700)'
-                                      }}
-                                    >
-                                      {pt}
-                                    </button>
-                                  ))}
-                                  {vp.selectedCrossModel === 'Meter_Model' && ['active_power', 'reactive_power', 'voltage_a', 'voltage_b', 'voltage_c', 'current_a', 'current_b', 'current_c', 'power_factor', 'frequency'].map(pt => (
-                                    <button
-                                      key={pt}
-                                      type="button"
-                                      onClick={() => {
-                                        const newFormula = (vp.formula || '') + `{${vp.selectedCrossModel}.${pt}}`;
-                                        handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
-                                      }}
-                                      style={{
-                                        padding: '4px 8px',
-                                        fontSize: '11px',
-                                        background: 'var(--success-50)',
-                                        border: '1px solid var(--success-300)',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        color: 'var(--success-700)'
-                                      }}
-                                    >
-                                      {pt}
-                                    </button>
-                                  ))}
-                                  {vp.selectedCrossModel === 'Inverter_Model' && ['dc_power', 'ac_power', 'mppt1_voltage', 'mppt1_current', 'mppt2_voltage', 'mppt2_current', 'efficiency', 'daily_energy'].map(pt => (
-                                    <button
-                                      key={pt}
-                                      type="button"
-                                      onClick={() => {
-                                        const newFormula = (vp.formula || '') + `{${vp.selectedCrossModel}.${pt}}`;
-                                        handleUpdateVirtualPoint(vpIndex, 'formula', newFormula);
-                                      }}
-                                      style={{
-                                        padding: '4px 8px',
-                                        fontSize: '11px',
-                                        background: 'var(--success-50)',
-                                        border: '1px solid var(--success-300)',
-                                        borderRadius: '4px',
-                                        cursor: 'pointer',
-                                        color: 'var(--success-700)'
-                                      }}
-                                    >
-                                      {pt}
-                                    </button>
-                                  ))}
+                                <div style={{ flex: 1, border: '1px solid var(--gray-200)', borderRadius: '4px', padding: '8px', background: 'var(--success-50)' }}>
+                                  <div style={{ fontSize: '11px', color: 'var(--gray-500)', marginBottom: '6px' }}>
+                                    点击点位插入到公式 (来自 <strong>{vp.selectedCrossModel}</strong>):
+                                  </div>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '100px', overflowY: 'auto' }}>
+                                    {/* 根据选择的物模型显示对应的典型点位 */}
+                                    {vp.selectedCrossModel === 'BMS_Model' && [
+                                      { name: 'pack_voltage', desc: '电池组电压' },
+                                      { name: 'pack_current', desc: '电池组电流' },
+                                      { name: 'soc', desc: '荷电状态' },
+                                      { name: 'soh', desc: '健康状态' },
+                                      { name: 'max_cell_temp', desc: '最高电芯温度' },
+                                      { name: 'min_cell_temp', desc: '最低电芯温度' },
+                                      { name: 'max_cell_voltage', desc: '最高电芯电压' },
+                                      { name: 'min_cell_voltage', desc: '最低电芯电压' }
+                                    ].map(pt => (
+                                      <button key={pt.name} type="button" title={pt.desc}
+                                        onClick={() => { handleUpdateVirtualPoint(vpIndex, 'formula', (vp.formula || '') + `{${vp.selectedCrossModel}.${pt.name}}`); }}
+                                        style={{ padding: '3px 6px', fontSize: '10px', background: 'white', border: '1px solid var(--success-400)', borderRadius: '3px', cursor: 'pointer', color: 'var(--success-700)' }}>
+                                        🔋 {pt.name}
+                                      </button>
+                                    ))}
+                                    {vp.selectedCrossModel === 'PCS_Model' && [
+                                      { name: 'dc_voltage', desc: '直流电压' },
+                                      { name: 'dc_current', desc: '直流电流' },
+                                      { name: 'dc_power', desc: '直流功率' },
+                                      { name: 'ac_power', desc: '交流功率' },
+                                      { name: 'efficiency', desc: '效率' },
+                                      { name: 'running_state', desc: '运行状态' },
+                                      { name: 'grid_frequency', desc: '电网频率' }
+                                    ].map(pt => (
+                                      <button key={pt.name} type="button" title={pt.desc}
+                                        onClick={() => { handleUpdateVirtualPoint(vpIndex, 'formula', (vp.formula || '') + `{${vp.selectedCrossModel}.${pt.name}}`); }}
+                                        style={{ padding: '3px 6px', fontSize: '10px', background: 'white', border: '1px solid var(--success-400)', borderRadius: '3px', cursor: 'pointer', color: 'var(--success-700)' }}>
+                                        ⚡ {pt.name}
+                                      </button>
+                                    ))}
+                                    {vp.selectedCrossModel === 'Battery_Cluster' && [
+                                      { name: 'cluster_voltage', desc: '簇电压' },
+                                      { name: 'cluster_current', desc: '簇电流' },
+                                      { name: 'cluster_soc', desc: '簇SOC' },
+                                      { name: 'cluster_temp', desc: '簇温度' }
+                                    ].map(pt => (
+                                      <button key={pt.name} type="button" title={pt.desc}
+                                        onClick={() => { handleUpdateVirtualPoint(vpIndex, 'formula', (vp.formula || '') + `{${vp.selectedCrossModel}.${pt.name}}`); }}
+                                        style={{ padding: '3px 6px', fontSize: '10px', background: 'white', border: '1px solid var(--success-400)', borderRadius: '3px', cursor: 'pointer', color: 'var(--success-700)' }}>
+                                        🔌 {pt.name}
+                                      </button>
+                                    ))}
+                                    {vp.selectedCrossModel === 'Meter_Model' && [
+                                      { name: 'active_power', desc: '有功功率' },
+                                      { name: 'reactive_power', desc: '无功功率' },
+                                      { name: 'voltage_a', desc: 'A相电压' },
+                                      { name: 'voltage_b', desc: 'B相电压' },
+                                      { name: 'voltage_c', desc: 'C相电压' },
+                                      { name: 'current_a', desc: 'A相电流' },
+                                      { name: 'current_b', desc: 'B相电流' },
+                                      { name: 'current_c', desc: 'C相电流' },
+                                      { name: 'power_factor', desc: '功率因数' },
+                                      { name: 'frequency', desc: '频率' },
+                                      { name: 'total_energy', desc: '总电量' }
+                                    ].map(pt => (
+                                      <button key={pt.name} type="button" title={pt.desc}
+                                        onClick={() => { handleUpdateVirtualPoint(vpIndex, 'formula', (vp.formula || '') + `{${vp.selectedCrossModel}.${pt.name}}`); }}
+                                        style={{ padding: '3px 6px', fontSize: '10px', background: 'white', border: '1px solid var(--success-400)', borderRadius: '3px', cursor: 'pointer', color: 'var(--success-700)' }}>
+                                        📊 {pt.name}
+                                      </button>
+                                    ))}
+                                    {vp.selectedCrossModel === 'Inverter_Model' && [
+                                      { name: 'dc_power', desc: '直流功率' },
+                                      { name: 'ac_power', desc: '交流功率' },
+                                      { name: 'mppt1_voltage', desc: 'MPPT1电压' },
+                                      { name: 'mppt1_current', desc: 'MPPT1电流' },
+                                      { name: 'mppt2_voltage', desc: 'MPPT2电压' },
+                                      { name: 'mppt2_current', desc: 'MPPT2电流' },
+                                      { name: 'efficiency', desc: '效率' },
+                                      { name: 'daily_energy', desc: '日发电量' }
+                                    ].map(pt => (
+                                      <button key={pt.name} type="button" title={pt.desc}
+                                        onClick={() => { handleUpdateVirtualPoint(vpIndex, 'formula', (vp.formula || '') + `{${vp.selectedCrossModel}.${pt.name}}`); }}
+                                        style={{ padding: '3px 6px', fontSize: '10px', background: 'white', border: '1px solid var(--success-400)', borderRadius: '3px', cursor: 'pointer', color: 'var(--success-700)' }}>
+                                        ☀️ {pt.name}
+                                      </button>
+                                    ))}
+                                    {vp.selectedCrossModel === 'Transformer' && [
+                                      { name: 'primary_voltage', desc: '一次电压' },
+                                      { name: 'secondary_voltage', desc: '二次电压' },
+                                      { name: 'load_ratio', desc: '负载率' },
+                                      { name: 'oil_temp', desc: '油温' }
+                                    ].map(pt => (
+                                      <button key={pt.name} type="button" title={pt.desc}
+                                        onClick={() => { handleUpdateVirtualPoint(vpIndex, 'formula', (vp.formula || '') + `{${vp.selectedCrossModel}.${pt.name}}`); }}
+                                        style={{ padding: '3px 6px', fontSize: '10px', background: 'white', border: '1px solid var(--success-400)', borderRadius: '3px', cursor: 'pointer', color: 'var(--success-700)' }}>
+                                        🔄 {pt.name}
+                                      </button>
+                                    ))}
+                                    {vp.selectedCrossModel === 'HVAC_Model' && [
+                                      { name: 'room_temp', desc: '室内温度' },
+                                      { name: 'set_temp', desc: '设定温度' },
+                                      { name: 'running_mode', desc: '运行模式' },
+                                      { name: 'power_consumption', desc: '功耗' }
+                                    ].map(pt => (
+                                      <button key={pt.name} type="button" title={pt.desc}
+                                        onClick={() => { handleUpdateVirtualPoint(vpIndex, 'formula', (vp.formula || '') + `{${vp.selectedCrossModel}.${pt.name}}`); }}
+                                        style={{ padding: '3px 6px', fontSize: '10px', background: 'white', border: '1px solid var(--success-400)', borderRadius: '3px', cursor: 'pointer', color: 'var(--success-700)' }}>
+                                        ❄️ {pt.name}
+                                      </button>
+                                    ))}
+                                    {vp.selectedCrossModel === 'Fire_System' && [
+                                      { name: 'smoke_alarm', desc: '烟感报警' },
+                                      { name: 'temp_alarm', desc: '温感报警' },
+                                      { name: 'fire_status', desc: '消防状态' }
+                                    ].map(pt => (
+                                      <button key={pt.name} type="button" title={pt.desc}
+                                        onClick={() => { handleUpdateVirtualPoint(vpIndex, 'formula', (vp.formula || '') + `{${vp.selectedCrossModel}.${pt.name}}`); }}
+                                        style={{ padding: '3px 6px', fontSize: '10px', background: 'white', border: '1px solid var(--success-400)', borderRadius: '3px', cursor: 'pointer', color: 'var(--success-700)' }}>
+                                        🔥 {pt.name}
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </div>
