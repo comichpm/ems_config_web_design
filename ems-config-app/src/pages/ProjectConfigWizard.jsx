@@ -396,6 +396,11 @@ function ProjectConfigWizard({ onNavigate }) {
     enabled: true
   });
 
+  // Phase 6: 配置预览和配置下发
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [deployStatus, setDeployStatus] = useState(null); // null, 'deploying', 'success', 'error'
+  const [deployMessage, setDeployMessage] = useState('');
+
   // 步骤7: 北向配置
   const northboundFileInputRef = useRef(null);
   const [northboundConfig, setNorthboundConfig] = useState({
@@ -480,6 +485,47 @@ function ProjectConfigWizard({ onNavigate }) {
         ...prev,
         schedulingMode: template.recommendedAlgorithm
       }));
+    }
+  };
+
+  // Phase 6: 获取完整配置数据（用于预览和下发）
+  const getCompleteConfig = () => {
+    return {
+      project: projectInfo,
+      template: selectedTemplate,
+      devices: selectedDevices.map(d => ({
+        ...d,
+        params: deviceParams[d.instanceId] || {}
+      })),
+      topology: { nodes, edges },
+      algorithm: algorithmConfig,
+      alarms: alarmRules,
+      northbound: northboundConfig,
+      createdAt: new Date().toISOString(),
+      version: '1.0.0'
+    };
+  };
+
+  // Phase 6: 配置下发函数
+  const handleDeployConfig = async () => {
+    setDeployStatus('deploying');
+    setDeployMessage('正在下发配置...');
+    
+    const config = getCompleteConfig();
+    
+    // 模拟API调用
+    try {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // 保存到localStorage作为模拟
+      localStorage.setItem('ems_deployed_config', JSON.stringify(config));
+      localStorage.setItem('ems_deploy_timestamp', new Date().toISOString());
+      
+      setDeployStatus('success');
+      setDeployMessage(`✅ 配置下发成功！\n\n下发时间: ${new Date().toLocaleString()}\n项目名称: ${projectInfo.name}\n设备数量: ${selectedDevices.length}\n北向协议: ${northboundConfig.protocol.toUpperCase()}`);
+    } catch (error) {
+      setDeployStatus('error');
+      setDeployMessage(`❌ 配置下发失败: ${error.message}`);
     }
   };
 
@@ -931,6 +977,23 @@ function ProjectConfigWizard({ onNavigate }) {
             >
               💾 保存项目
             </button>
+            {/* Phase 6: 配置预览按钮 */}
+            <button 
+              className="btn btn-info btn-lg"
+              onClick={() => setShowPreviewModal(true)}
+              style={{ background: '#6366f1', borderColor: '#6366f1' }}
+            >
+              👁️ 配置预览
+            </button>
+            {/* Phase 6: 配置下发按钮 */}
+            <button 
+              className="btn btn-warning btn-lg"
+              onClick={handleDeployConfig}
+              disabled={deployStatus === 'deploying'}
+              style={{ background: '#f59e0b', borderColor: '#f59e0b' }}
+            >
+              {deployStatus === 'deploying' ? '⏳ 下发中...' : '🚀 下发配置'}
+            </button>
             <button 
               className="btn btn-secondary btn-lg"
               onClick={() => onNavigate('project-list', '项目管理')}
@@ -938,6 +1001,59 @@ function ProjectConfigWizard({ onNavigate }) {
               查看项目列表
             </button>
           </div>
+
+          {/* Phase 6: 配置预览模态框 */}
+          {showPreviewModal && (
+            <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+              <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', maxWidth: '800px', width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0 }}>📋 配置预览</h3>
+                  <button onClick={() => setShowPreviewModal(false)} style={{ background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' }}>×</button>
+                </div>
+                <pre style={{ background: '#f5f5f5', padding: '16px', borderRadius: '8px', fontSize: '12px', overflow: 'auto', maxHeight: '50vh' }}>
+                  {JSON.stringify(getCompleteConfig(), null, 2)}
+                </pre>
+                <div style={{ display: 'flex', gap: '12px', marginTop: '16px', justifyContent: 'flex-end' }}>
+                  <button className="btn btn-secondary" onClick={() => setShowPreviewModal(false)}>关闭</button>
+                  <button className="btn btn-primary" onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(getCompleteConfig(), null, 2));
+                    alert('配置已复制到剪贴板！');
+                  }}>📋 复制配置</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Phase 6: 下发状态提示 */}
+          {deployStatus && (
+            <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001 }}>
+              <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', maxWidth: '400px', width: '90%', textAlign: 'center' }}>
+                {deployStatus === 'deploying' && (
+                  <>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>⏳</div>
+                    <h3>正在下发配置...</h3>
+                    <p style={{ color: '#666' }}>请稍候，正在将配置下发到设备</p>
+                  </>
+                )}
+                {deployStatus === 'success' && (
+                  <>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>✅</div>
+                    <h3 style={{ color: '#10b981' }}>下发成功！</h3>
+                    <pre style={{ background: '#f0fdf4', padding: '12px', borderRadius: '8px', fontSize: '12px', textAlign: 'left', whiteSpace: 'pre-wrap' }}>{deployMessage}</pre>
+                    <button className="btn btn-primary" style={{ marginTop: '16px' }} onClick={() => setDeployStatus(null)}>确定</button>
+                  </>
+                )}
+                {deployStatus === 'error' && (
+                  <>
+                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
+                    <h3 style={{ color: '#ef4444' }}>下发失败</h3>
+                    <p style={{ color: '#666' }}>{deployMessage}</p>
+                    <button className="btn btn-primary" style={{ marginTop: '16px' }} onClick={() => setDeployStatus(null)}>确定</button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
