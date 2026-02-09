@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   deviceCategories,
   protocolTypes,
@@ -105,6 +105,20 @@ function DeviceModelWizard({ onNavigate }) {
   });
 
   const [completed, setCompleted] = useState(false);
+  
+  // Phase 5: 动态加载已保存的物模型（用于跨物模型点位选择）
+  const [savedModels, setSavedModels] = useState([]);
+  
+  useEffect(() => {
+    // 从localStorage加载已保存的物模型
+    try {
+      const models = JSON.parse(localStorage.getItem('ems_device_models') || '[]');
+      setSavedModels(Array.isArray(models) ? models : []);
+    } catch (e) {
+      console.error('Failed to load saved models:', e);
+      setSavedModels([]);
+    }
+  }, []);
 
   // 获取当前协议可用的点表类型
   const getAvailablePointTables = () => {
@@ -1891,10 +1905,10 @@ function DeviceModelWizard({ onNavigate }) {
                             )}
                           </div>
 
-                          {/* 跨物模型点表选择 - 增强版 */}
+                          {/* 跨物模型点表选择 - 增强版 - Phase 5: 动态加载 */}
                           <div style={{ marginBottom: '12px' }}>
                             <div style={{ fontSize: '12px', fontWeight: '600', color: 'var(--gray-600)', marginBottom: '6px' }}>
-                              🔗 跨物模型点表 <span style={{ color: 'var(--gray-400)' }}>(从其他物模型选择点位)</span>
+                              🔗 跨物模型点表 <span style={{ color: 'var(--gray-400)' }}>(从其他已保存的物模型选择点位)</span>
                             </div>
                             
                             {/* 说明提示 */}
@@ -1905,24 +1919,26 @@ function DeviceModelWizard({ onNavigate }) {
                             <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                               <select 
                                 className="form-select"
-                                style={{ width: '180px', fontSize: '12px' }}
+                                style={{ width: '200px', fontSize: '12px' }}
                                 value={vp.selectedCrossModel || ''}
                                 onChange={(e) => handleUpdateVirtualPoint(vpIndex, 'selectedCrossModel', e.target.value)}
                               >
-                                <option value="">选择其他物模型...</option>
-                                <optgroup label="储能系统">
-                                  <option value="BMS_Model">🔋 BMS电池管理系统</option>
-                                  <option value="PCS_Model">⚡ PCS储能变流器</option>
-                                  <option value="Battery_Cluster">🔌 电池簇</option>
-                                </optgroup>
-                                <optgroup label="电力设备">
-                                  <option value="Meter_Model">📊 电表</option>
-                                  <option value="Inverter_Model">☀️ 光伏逆变器</option>
-                                  <option value="Transformer">🔄 变压器</option>
-                                </optgroup>
-                                <optgroup label="辅助设备">
-                                  <option value="HVAC_Model">❄️ 空调系统</option>
-                                  <option value="Fire_System">🔥 消防系统</option>
+                                <option value="">选择已保存的物模型...</option>
+                                {savedModels.length > 0 ? (
+                                  savedModels.map(model => (
+                                    <option key={model.id} value={model.id}>
+                                      {model.modelName || model.name} ({model.deviceType || '未知类型'})
+                                    </option>
+                                  ))
+                                ) : (
+                                  <option disabled>暂无已保存的物模型</option>
+                                )}
+                                {/* 预设模板选项 */}
+                                <optgroup label="━━━ 预设模板 ━━━">
+                                  <option value="BMS_Model">🔋 BMS电池管理系统 (模板)</option>
+                                  <option value="PCS_Model">⚡ PCS储能变流器 (模板)</option>
+                                  <option value="Meter_Model">📊 电表 (模板)</option>
+                                  <option value="Inverter_Model">☀️ 光伏逆变器 (模板)</option>
                                 </optgroup>
                               </select>
                               

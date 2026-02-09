@@ -114,6 +114,98 @@ const presetAlarmRules = [
   { id: 'bms_fault', name: 'BMS故障', condition: '故障码 ≠ 0', level: 'critical', enabled: true }
 ];
 
+// Phase 5: 峰谷时段重叠检测函数
+const validateTimePeriods = (peakPeriods, valleyPeriods) => {
+  const errors = [];
+  const warnings = [];
+  
+  // 转换时间为分钟数便于比较
+  const timeToMinutes = (timeStr) => {
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    return hours * 60 + minutes;
+  };
+  
+  // 检查两个时段是否重叠
+  const periodsOverlap = (p1Start, p1End, p2Start, p2End) => {
+    // 处理跨越午夜的情况
+    if (p1End < p1Start) p1End += 24 * 60; // 跨午夜
+    if (p2End < p2Start) p2End += 24 * 60;
+    return p1Start < p2End && p2Start < p1End;
+  };
+  
+  // 检查峰时段之间是否重叠
+  for (let i = 0; i < peakPeriods.length; i++) {
+    for (let j = i + 1; j < peakPeriods.length; j++) {
+      const p1Start = timeToMinutes(peakPeriods[i].startTime);
+      const p1End = timeToMinutes(peakPeriods[i].endTime);
+      const p2Start = timeToMinutes(peakPeriods[j].startTime);
+      const p2End = timeToMinutes(peakPeriods[j].endTime);
+      
+      if (periodsOverlap(p1Start, p1End, p2Start, p2End)) {
+        errors.push(`峰时段 "${peakPeriods[i].name}" 与 "${peakPeriods[j].name}" 时间重叠`);
+      }
+    }
+  }
+  
+  // 检查谷时段之间是否重叠
+  for (let i = 0; i < valleyPeriods.length; i++) {
+    for (let j = i + 1; j < valleyPeriods.length; j++) {
+      const p1Start = timeToMinutes(valleyPeriods[i].startTime);
+      const p1End = timeToMinutes(valleyPeriods[i].endTime);
+      const p2Start = timeToMinutes(valleyPeriods[j].startTime);
+      const p2End = timeToMinutes(valleyPeriods[j].endTime);
+      
+      if (periodsOverlap(p1Start, p1End, p2Start, p2End)) {
+        errors.push(`谷时段 "${valleyPeriods[i].name}" 与 "${valleyPeriods[j].name}" 时间重叠`);
+      }
+    }
+  }
+  
+  // 检查峰谷时段是否重叠
+  for (const peak of peakPeriods) {
+    for (const valley of valleyPeriods) {
+      const pStart = timeToMinutes(peak.startTime);
+      const pEnd = timeToMinutes(peak.endTime);
+      const vStart = timeToMinutes(valley.startTime);
+      const vEnd = timeToMinutes(valley.endTime);
+      
+      if (periodsOverlap(pStart, pEnd, vStart, vEnd)) {
+        errors.push(`峰时段 "${peak.name}" 与谷时段 "${valley.name}" 时间重叠`);
+      }
+    }
+  }
+  
+  // 计算总覆盖时间
+  const totalPeakMinutes = peakPeriods.reduce((sum, p) => {
+    let duration = timeToMinutes(p.endTime) - timeToMinutes(p.startTime);
+    if (duration < 0) duration += 24 * 60;
+    return sum + duration;
+  }, 0);
+  
+  const totalValleyMinutes = valleyPeriods.reduce((sum, p) => {
+    let duration = timeToMinutes(p.endTime) - timeToMinutes(p.startTime);
+    if (duration < 0) duration += 24 * 60;
+    return sum + duration;
+  }, 0);
+  
+  const totalMinutes = totalPeakMinutes + totalValleyMinutes;
+  const coverage = (totalMinutes / (24 * 60)) * 100;
+  
+  if (coverage < 50) {
+    warnings.push(`峰谷时段仅覆盖 ${coverage.toFixed(1)}% 的时间，建议增加时段配置`);
+  }
+  
+  if (totalPeakMinutes === 0) {
+    warnings.push('未配置峰时段，将无法进行峰谷套利');
+  }
+  
+  if (totalValleyMinutes === 0) {
+    warnings.push('未配置谷时段，将无法进行低价充电');
+  }
+  
+  return { isValid: errors.length === 0, errors, warnings, coverage };
+};
+
 // 自定义节点样式
 const nodeStyles = {
   wind: { background: '#dbeafe', borderColor: '#3b82f6' },
