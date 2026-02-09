@@ -11,6 +11,25 @@ function DeviceModelList({ onNavigate }) {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingModel, setEditingModel] = useState(null);
   const [editTab, setEditTab] = useState('basic'); // 编辑模态框Tab: basic, attributes, protocol, points, alarms, virtual
+  
+  // Phase 2: 版本管理、导入导出、验证、比较
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [versionHistory, setVersionHistory] = useState([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+  const [compareModels, setCompareModels] = useState([null, null]);
+  const [validationResults, setValidationResults] = useState(null);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  
+  // Phase 3: 批量操作、搜索增强
+  const [selectedModels, setSelectedModels] = useState([]);
+  const [sortBy, setSortBy] = useState('updatedAt');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+  
+  // Phase 4: 多语言、主题
+  const [language, setLanguage] = useState('zh');
+  const [theme, setTheme] = useState('light');
 
   useEffect(() => {
     loadModels();
@@ -46,8 +65,17 @@ function DeviceModelList({ onNavigate }) {
       alert('物模型名称不能为空');
       return;
     }
+    // Phase 2: 保存版本历史
+    const oldModel = deviceModels.find(m => m.id === editingModel.id);
+    if (oldModel) {
+      const history = JSON.parse(localStorage.getItem(`ems_model_history_${editingModel.id}`) || '[]');
+      history.push({ ...oldModel, savedAt: new Date().toISOString(), version: history.length + 1 });
+      localStorage.setItem(`ems_model_history_${editingModel.id}`, JSON.stringify(history.slice(-10))); // 保留最近10个版本
+    }
+    
+    const newVersion = (editingModel.version || 0) + 1;
     const updatedModels = deviceModels.map(m => 
-      m.id === editingModel.id ? { ...editingModel, updatedAt: new Date().toISOString() } : m
+      m.id === editingModel.id ? { ...editingModel, version: newVersion, updatedAt: new Date().toISOString() } : m
     );
     localStorage.setItem('ems_device_models', JSON.stringify(updatedModels));
     setDeviceModels(updatedModels);
@@ -55,6 +83,199 @@ function DeviceModelList({ onNavigate }) {
     setEditingModel(null);
     alert('物模型更新成功！');
   };
+
+  // ========== Phase 2: 版本管理 ==========
+  const handleViewVersionHistory = (model) => {
+    const history = JSON.parse(localStorage.getItem(`ems_model_history_${model.id}`) || '[]');
+    setVersionHistory(history);
+    setEditingModel(model);
+    setShowVersionModal(true);
+  };
+
+  const handleRestoreVersion = (version) => {
+    if (window.confirm(`确定要恢复到版本 ${version.version} 吗？`)) {
+      const restored = { ...version, id: editingModel.id, restoredAt: new Date().toISOString() };
+      delete restored.savedAt;
+      delete restored.version;
+      const updatedModels = deviceModels.map(m => m.id === editingModel.id ? restored : m);
+      localStorage.setItem('ems_device_models', JSON.stringify(updatedModels));
+      setDeviceModels(updatedModels);
+      setShowVersionModal(false);
+      alert('版本恢复成功！');
+    }
+  };
+
+  // ========== Phase 2: 配置验证器 ==========
+  const validateModel = (model) => {
+    const errors = [];
+    const warnings = [];
+    
+    // 必填项检查
+    if (!model.modelName) errors.push('物模型名称不能为空');
+    if (!model.deviceCategory) errors.push('设备分类不能为空');
+    if (!model.deviceType) errors.push('设备类型不能为空');
+    
+    // 点表检查
+    if (!model.pointTable || model.pointTable.length === 0) {
+      warnings.push('点表配置为空，建议添加点位');
+    } else {
+      const pointNames = model.pointTable.map(p => p.name);
+      const duplicates = pointNames.filter((name, index) => pointNames.indexOf(name) !== index);
+      if (duplicates.length > 0) errors.push(`点表存在重复点位名称: ${[...new Set(duplicates)].join(', ')}`);
+    }
+    
+    // 告警规则检查
+    if (model.alarmRules) {
+      model.alarmRules.forEach((rule, i) => {
+        if (!rule.name) warnings.push(`告警规则 ${i + 1} 缺少名称`);
+        if (!rule.threshold && rule.threshold !== 0) warnings.push(`告警规则 ${rule.name || i + 1} 缺少阈值`);
+      });
+    }
+    
+    return { errors, warnings, isValid: errors.length === 0 };
+  };
+
+  const handleValidateModel = (model) => {
+    const results = validateModel(model);
+    setValidationResults({ model, ...results });
+    setShowValidationModal(true);
+  };
+
+  // ========== Phase 2: 配置比较工具 ==========
+  const handleCompareModels = () => {
+    if (selectedModels.length !== 2) {
+      alert('请选择两个物模型进行比较');
+      return;
+    }
+    const models = selectedModels.map(id => deviceModels.find(m => m.id === id));
+    setCompareModels(models);
+    setShowCompareModal(true);
+  };
+
+  const getModelDiff = (model1, model2) => {
+    const diff = [];
+    const keys = ['modelName', 'description', 'manufacturer', 'modelSpec', 'deviceCategory', 'deviceType', 'protocol', 'channelType'];
+    keys.forEach(key => {
+      if (model1[key] !== model2[key]) {
+        diff.push({ field: key, value1: model1[key], value2: model2[key] });
+      }
+    });
+    // 点表数量比较
+    const pt1 = model1.pointTable?.length || 0;
+    const pt2 = model2.pointTable?.length || 0;
+    if (pt1 !== pt2) diff.push({ field: '点表数量', value1: pt1, value2: pt2 });
+    // 告警数量比较
+    const ar1 = model1.alarmRules?.length || 0;
+    const ar2 = model2.alarmRules?.length || 0;
+    if (ar1 !== ar2) diff.push({ field: '告警规则数量', value1: ar1, value2: ar2 });
+    return diff;
+  };
+
+  // ========== Phase 3: 批量操作 ==========
+  const handleSelectAll = () => {
+    if (selectedModels.length === filteredModels.length) {
+      setSelectedModels([]);
+    } else {
+      setSelectedModels(filteredModels.map(m => m.id));
+    }
+  };
+
+  const handleSelectModel = (modelId) => {
+    setSelectedModels(prev => 
+      prev.includes(modelId) ? prev.filter(id => id !== modelId) : [...prev, modelId]
+    );
+  };
+
+  const handleBatchDelete = () => {
+    if (selectedModels.length === 0) return;
+    if (window.confirm(`确定要删除选中的 ${selectedModels.length} 个物模型吗？`)) {
+      const updatedModels = deviceModels.filter(m => !selectedModels.includes(m.id));
+      localStorage.setItem('ems_device_models', JSON.stringify(updatedModels));
+      setDeviceModels(updatedModels);
+      setSelectedModels([]);
+    }
+  };
+
+  const handleBatchExport = () => {
+    if (selectedModels.length === 0) return;
+    const models = deviceModels.filter(m => selectedModels.includes(m.id));
+    const blob = new Blob([JSON.stringify(models, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ems_models_batch_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // ========== Phase 3: 排序 ==========
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('desc');
+    }
+  };
+
+  // ========== Phase 3: 新手教程 ==========
+  const tutorialSteps = [
+    { title: '欢迎使用物模型管理', content: '这是物模型库，您可以在这里管理所有设备物模型。' },
+    { title: '创建物模型', content: '点击"创建物模型"按钮开始创建新的物模型。' },
+    { title: '编辑物模型', content: '点击物模型行的"编辑"按钮可以修改物模型的所有配置。' },
+    { title: '版本管理', content: '点击"版本"按钮可以查看物模型的历史版本并恢复。' },
+    { title: '导入导出', content: '支持导入/导出单个或批量物模型配置。' },
+    { title: '批量操作', content: '勾选多个物模型后可以进行批量删除或导出。' },
+  ];
+
+  // ========== Phase 4: 多语言 ==========
+  const i18n = {
+    zh: {
+      title: '物模型库',
+      create: '创建物模型',
+      search: '搜索物模型...',
+      allCategories: '全部分类',
+      edit: '编辑',
+      delete: '删除',
+      export: '导出',
+      import: '导入',
+      version: '版本',
+      validate: '验证',
+      compare: '比较',
+      batchDelete: '批量删除',
+      batchExport: '批量导出',
+      tutorial: '使用教程',
+      noModels: '暂无物模型，点击"创建物模型"开始创建',
+    },
+    en: {
+      title: 'Device Model Library',
+      create: 'Create Model',
+      search: 'Search models...',
+      allCategories: 'All Categories',
+      edit: 'Edit',
+      delete: 'Delete',
+      export: 'Export',
+      import: 'Import',
+      version: 'Version',
+      validate: 'Validate',
+      compare: 'Compare',
+      batchDelete: 'Batch Delete',
+      batchExport: 'Batch Export',
+      tutorial: 'Tutorial',
+      noModels: 'No models yet. Click "Create Model" to start.',
+    }
+  };
+  const t = i18n[language];
+
+  // ========== Phase 4: 主题 ==========
+  const themes = {
+    light: { bg: '#f5f5f5', card: '#fff', text: '#333', primary: '#1890ff', border: '#e8e8e8' },
+    dark: { bg: '#1a1a2e', card: '#16213e', text: '#eee', primary: '#0f4c75', border: '#0f4c75' },
+    blue: { bg: '#e3f2fd', card: '#fff', text: '#1565c0', primary: '#1976d2', border: '#90caf9' },
+  };
+  const currentTheme = themes[theme];
 
   const handleExportModel = (model) => {
     const blob = new Blob([JSON.stringify(model, null, 2)], { type: 'application/json' });
@@ -123,10 +344,22 @@ function DeviceModelList({ onNavigate }) {
                          m.manufacturer?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || m.deviceCategory === selectedCategory;
     return matchesSearch && matchesCategory;
+  }).sort((a, b) => {
+    // Phase 3: 排序功能
+    let aVal = a[sortBy] || '';
+    let bVal = b[sortBy] || '';
+    if (sortBy === 'updatedAt' || sortBy === 'createdAt') {
+      aVal = new Date(aVal).getTime() || 0;
+      bVal = new Date(bVal).getTime() || 0;
+    }
+    if (sortOrder === 'asc') {
+      return aVal > bVal ? 1 : -1;
+    }
+    return aVal < bVal ? 1 : -1;
   });
 
   return (
-    <div>
+    <div style={{ background: currentTheme.bg, minHeight: '100vh', padding: '20px', color: currentTheme.text }}>
       <input
         type="file"
         ref={fileInputRef}
@@ -135,9 +368,36 @@ function DeviceModelList({ onNavigate }) {
         onChange={handleFileChange}
       />
 
+      {/* Phase 4: 语言和主题切换 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '12px' }}>
+        <select 
+          value={language} 
+          onChange={(e) => setLanguage(e.target.value)}
+          style={{ padding: '4px 8px', borderRadius: '4px', border: `1px solid ${currentTheme.border}`, background: currentTheme.card, color: currentTheme.text }}
+        >
+          <option value="zh">🇨🇳 中文</option>
+          <option value="en">🇺🇸 English</option>
+        </select>
+        <select 
+          value={theme} 
+          onChange={(e) => setTheme(e.target.value)}
+          style={{ padding: '4px 8px', borderRadius: '4px', border: `1px solid ${currentTheme.border}`, background: currentTheme.card, color: currentTheme.text }}
+        >
+          <option value="light">☀️ 浅色</option>
+          <option value="dark">🌙 深色</option>
+          <option value="blue">💙 蓝色</option>
+        </select>
+        <button 
+          onClick={() => setShowTutorial(true)}
+          style={{ padding: '4px 12px', borderRadius: '4px', background: currentTheme.primary, color: '#fff', border: 'none', cursor: 'pointer' }}
+        >
+          ❓ {t.tutorial}
+        </button>
+      </div>
+
       {/* 头部操作栏 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
           <div className="search-input" style={{ width: '250px' }}>
             <svg viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -145,7 +405,7 @@ function DeviceModelList({ onNavigate }) {
             <input
               type="text"
               className="form-input"
-              placeholder="搜索物模型..."
+              placeholder={t.search}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -156,26 +416,59 @@ function DeviceModelList({ onNavigate }) {
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
           >
-            <option value="all">全部分类</option>
+            <option value="all">{t.allCategories}</option>
             {deviceCategories.map(cat => (
               <option key={cat.id} value={cat.id}>{cat.icon} {cat.name}</option>
             ))}
           </select>
+          {/* Phase 3: 排序 */}
+          <select
+            className="form-select"
+            style={{ width: '130px' }}
+            value={`${sortBy}-${sortOrder}`}
+            onChange={(e) => {
+              const [field, order] = e.target.value.split('-');
+              setSortBy(field);
+              setSortOrder(order);
+            }}
+          >
+            <option value="updatedAt-desc">最近更新</option>
+            <option value="updatedAt-asc">最早更新</option>
+            <option value="modelName-asc">名称 A-Z</option>
+            <option value="modelName-desc">名称 Z-A</option>
+          </select>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+          {/* Phase 3: 批量操作 */}
+          {selectedModels.length > 0 && (
+            <>
+              <button className="btn btn-danger" onClick={handleBatchDelete}>
+                🗑️ {t.batchDelete} ({selectedModels.length})
+              </button>
+              <button className="btn btn-secondary" onClick={handleBatchExport}>
+                📥 {t.batchExport} ({selectedModels.length})
+              </button>
+            </>
+          )}
+          {/* Phase 2: 比较 */}
+          {selectedModels.length === 2 && (
+            <button className="btn btn-info" onClick={handleCompareModels}>
+              🔍 {t.compare}
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={handleImportModel}>
-            📤 导入物模型
+            📤 {t.import}
           </button>
           {deviceModels.length > 0 && (
             <button className="btn btn-secondary" onClick={handleExportAll}>
-              📥 导出全部
+              📥 {t.export}
             </button>
           )}
           <button 
             className="btn btn-primary"
             onClick={() => onNavigate('device-model-wizard', '创建物模型')}
           >
-            ➕ 创建物模型
+            ➕ {t.create}
           </button>
         </div>
       </div>
@@ -200,17 +493,25 @@ function DeviceModelList({ onNavigate }) {
           )}
         </div>
       ) : (
-        <div className="table-container">
+        <div className="table-container" style={{ background: currentTheme.card, borderRadius: '8px' }}>
           <table>
             <thead>
               <tr>
+                {/* Phase 3: 批量选择 */}
+                <th style={{ width: '40px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedModels.length === filteredModels.length && filteredModels.length > 0}
+                    onChange={handleSelectAll}
+                  />
+                </th>
                 <th>物模型名称</th>
                 <th>设备分类</th>
                 <th>设备类型</th>
                 <th>厂商</th>
                 <th>协议</th>
-                <th>电压等级</th>
-                <th>创建时间</th>
+                <th>版本</th>
+                <th>更新时间</th>
                 <th>操作</th>
               </tr>
             </thead>
@@ -219,7 +520,15 @@ function DeviceModelList({ onNavigate }) {
                 const category = deviceCategories.find(c => c.id === model.deviceCategory);
                 const device = category?.devices.find(d => d.id === model.deviceType);
                 return (
-                  <tr key={model.id}>
+                  <tr key={model.id} style={{ background: selectedModels.includes(model.id) ? `${currentTheme.primary}20` : 'transparent' }}>
+                    {/* Phase 3: 复选框 */}
+                    <td>
+                      <input 
+                        type="checkbox" 
+                        checked={selectedModels.includes(model.id)}
+                        onChange={() => handleSelectModel(model.id)}
+                      />
+                    </td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span style={{ fontSize: '20px' }}>{device?.icon || '📦'}</span>
@@ -234,30 +543,53 @@ function DeviceModelList({ onNavigate }) {
                     <td>
                       <span className="tag tag-gray">{model.protocolType?.toUpperCase() || '-'}</span>
                     </td>
-                    <td>{model.voltageLevel?.toUpperCase() || '-'}</td>
+                    <td>
+                      <span className="tag tag-green">v{model.version || 1}</span>
+                    </td>
                     <td style={{ fontSize: '12px', color: 'var(--gray-500)' }}>
-                      {model.createdAt ? new Date(model.createdAt).toLocaleDateString() : '-'}
+                      {model.updatedAt ? new Date(model.updatedAt).toLocaleDateString() : (model.createdAt ? new Date(model.createdAt).toLocaleDateString() : '-')}
                     </td>
                     <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
+                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
                         <button 
                           className="btn btn-sm btn-warning"
                           style={{ backgroundColor: '#f59e0b', color: 'white' }}
                           onClick={() => handleEditModel(model)}
+                          title={t.edit}
                         >
-                          ✏️ 编辑
+                          ✏️
+                        </button>
+                        {/* Phase 2: 版本历史 */}
+                        <button 
+                          className="btn btn-sm btn-info"
+                          style={{ backgroundColor: '#06b6d4', color: 'white' }}
+                          onClick={() => handleViewVersionHistory(model)}
+                          title={t.version}
+                        >
+                          📋
+                        </button>
+                        {/* Phase 2: 验证 */}
+                        <button 
+                          className="btn btn-sm btn-success"
+                          style={{ backgroundColor: '#10b981', color: 'white' }}
+                          onClick={() => handleValidateModel(model)}
+                          title={t.validate}
+                        >
+                          ✅
                         </button>
                         <button 
                           className="btn btn-sm btn-secondary"
                           onClick={() => handleExportModel(model)}
+                          title={t.export}
                         >
-                          📥 导出
+                          📥
                         </button>
                         <button 
                           className="btn btn-sm btn-danger"
                           onClick={() => handleDeleteModel(model.id)}
+                          title={t.delete}
                         >
-                          删除
+                          🗑️
                         </button>
                       </div>
                     </td>
@@ -266,6 +598,134 @@ function DeviceModelList({ onNavigate }) {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Phase 3: 新手教程模态框 */}
+      {showTutorial && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: currentTheme.card, borderRadius: '12px', padding: '24px', maxWidth: '500px', width: '90%' }}>
+            <h3 style={{ marginBottom: '16px' }}>📚 {tutorialSteps[tutorialStep].title}</h3>
+            <p style={{ marginBottom: '24px', lineHeight: '1.6' }}>{tutorialSteps[tutorialStep].content}</p>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ color: '#888' }}>{tutorialStep + 1} / {tutorialSteps.length}</span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                {tutorialStep > 0 && (
+                  <button className="btn btn-secondary" onClick={() => setTutorialStep(prev => prev - 1)}>上一步</button>
+                )}
+                {tutorialStep < tutorialSteps.length - 1 ? (
+                  <button className="btn btn-primary" onClick={() => setTutorialStep(prev => prev + 1)}>下一步</button>
+                ) : (
+                  <button className="btn btn-primary" onClick={() => { setShowTutorial(false); setTutorialStep(0); }}>完成</button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 2: 版本历史模态框 */}
+      {showVersionModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: currentTheme.card, borderRadius: '12px', padding: '24px', maxWidth: '600px', width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
+            <h3 style={{ marginBottom: '16px' }}>📋 版本历史 - {editingModel?.modelName}</h3>
+            {versionHistory.length === 0 ? (
+              <p style={{ color: '#888' }}>暂无历史版本</p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {versionHistory.map((v, i) => (
+                  <div key={i} style={{ padding: '12px', border: `1px solid ${currentTheme.border}`, borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <strong>版本 {v.version}</strong>
+                      <p style={{ fontSize: '12px', color: '#888', margin: '4px 0 0' }}>
+                        保存于 {new Date(v.savedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <button className="btn btn-sm btn-primary" onClick={() => handleRestoreVersion(v)}>恢复此版本</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ marginTop: '24px', textAlign: 'right' }}>
+              <button className="btn btn-secondary" onClick={() => setShowVersionModal(false)}>关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 2: 验证结果模态框 */}
+      {showValidationModal && validationResults && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: currentTheme.card, borderRadius: '12px', padding: '24px', maxWidth: '500px', width: '90%' }}>
+            <h3 style={{ marginBottom: '16px' }}>
+              {validationResults.isValid ? '✅ 验证通过' : '❌ 验证失败'} - {validationResults.model?.modelName}
+            </h3>
+            {validationResults.errors.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <h4 style={{ color: '#ef4444', marginBottom: '8px' }}>错误：</h4>
+                <ul style={{ paddingLeft: '20px' }}>
+                  {validationResults.errors.map((e, i) => <li key={i} style={{ color: '#ef4444' }}>{e}</li>)}
+                </ul>
+              </div>
+            )}
+            {validationResults.warnings.length > 0 && (
+              <div style={{ marginBottom: '16px' }}>
+                <h4 style={{ color: '#f59e0b', marginBottom: '8px' }}>警告：</h4>
+                <ul style={{ paddingLeft: '20px' }}>
+                  {validationResults.warnings.map((w, i) => <li key={i} style={{ color: '#f59e0b' }}>{w}</li>)}
+                </ul>
+              </div>
+            )}
+            {validationResults.isValid && validationResults.warnings.length === 0 && (
+              <p style={{ color: '#10b981' }}>物模型配置完整，无错误和警告。</p>
+            )}
+            <div style={{ marginTop: '24px', textAlign: 'right' }}>
+              <button className="btn btn-secondary" onClick={() => setShowValidationModal(false)}>关闭</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 2: 比较模态框 */}
+      {showCompareModal && compareModels[0] && compareModels[1] && (
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: currentTheme.card, borderRadius: '12px', padding: '24px', maxWidth: '800px', width: '90%', maxHeight: '80vh', overflow: 'auto' }}>
+            <h3 style={{ marginBottom: '16px' }}>🔍 物模型比较</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div style={{ padding: '12px', background: currentTheme.bg, borderRadius: '8px', textAlign: 'center' }}>
+                <strong>{compareModels[0].modelName}</strong>
+              </div>
+              <div style={{ padding: '12px', background: currentTheme.bg, borderRadius: '8px', textAlign: 'center' }}>
+                <strong>{compareModels[1].modelName}</strong>
+              </div>
+            </div>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ padding: '8px', borderBottom: `1px solid ${currentTheme.border}` }}>字段</th>
+                  <th style={{ padding: '8px', borderBottom: `1px solid ${currentTheme.border}` }}>{compareModels[0].modelName}</th>
+                  <th style={{ padding: '8px', borderBottom: `1px solid ${currentTheme.border}` }}>{compareModels[1].modelName}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getModelDiff(compareModels[0], compareModels[1]).map((d, i) => (
+                  <tr key={i} style={{ background: '#fef3c7' }}>
+                    <td style={{ padding: '8px', borderBottom: `1px solid ${currentTheme.border}` }}>{d.field}</td>
+                    <td style={{ padding: '8px', borderBottom: `1px solid ${currentTheme.border}` }}>{String(d.value1 || '-')}</td>
+                    <td style={{ padding: '8px', borderBottom: `1px solid ${currentTheme.border}` }}>{String(d.value2 || '-')}</td>
+                  </tr>
+                ))}
+                {getModelDiff(compareModels[0], compareModels[1]).length === 0 && (
+                  <tr>
+                    <td colSpan={3} style={{ padding: '16px', textAlign: 'center', color: '#888' }}>两个物模型配置相同</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+            <div style={{ marginTop: '24px', textAlign: 'right' }}>
+              <button className="btn btn-secondary" onClick={() => { setShowCompareModal(false); setSelectedModels([]); }}>关闭</button>
+            </div>
+          </div>
         </div>
       )}
 
